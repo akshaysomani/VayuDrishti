@@ -49,6 +49,7 @@ beijing+pm2+5+data/
 *.parquet
 *.csv
 !scripts/coordinates_override_TEMPLATE.csv
+!scripts/coordinates_override.csv
 
 # Scratch directory
 scratch/

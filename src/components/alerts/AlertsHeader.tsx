@@ -46,7 +46,7 @@ export const AlertsHeader: React.FC<AlertsHeaderProps> = ({ meta }) => {
         <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-fg-muted">
           <div className="flex items-center gap-1.5 bg-surface-subtle px-3 py-1.5 rounded-lg border border-surface-border">
             <Calendar className="w-3.5 h-3.5 text-brand-500" aria-hidden="true" />
-            <span>Test Year: {meta.test_year}</span>
+            <span>Test: {meta.test_period ?? meta.test_year}</span>
           </div>
           <div className="flex items-center gap-1.5 bg-surface-subtle px-3 py-1.5 rounded-lg border border-surface-border">
             <Database className="w-3.5 h-3.5 text-brand-500" aria-hidden="true" />
@@ -54,7 +54,9 @@ export const AlertsHeader: React.FC<AlertsHeaderProps> = ({ meta }) => {
           </div>
           <div className="flex items-center gap-1.5 bg-surface-subtle px-3 py-1.5 rounded-lg border border-surface-border">
             <Layers className="w-3.5 h-3.5 text-brand-500" aria-hidden="true" />
-            <span>Train: {meta.train_years.join(', ')} | Val: {meta.validation_year}</span>
+            <span>
+              Train: {meta.train_period ?? meta.train_years?.join(', ') ?? '—'} | Val: {meta.validation_period ?? meta.validation_year ?? '—'}
+            </span>
           </div>
         </div>
       </div>

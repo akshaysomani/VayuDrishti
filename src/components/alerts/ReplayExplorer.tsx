@@ -11,7 +11,12 @@ import {
   Table as TableIcon,
   LineChart,
 } from 'lucide-react';
-import type { PredictionsColumnar, OperatingPointDef } from '../../types/alert';
+import {
+  getRiskTier,
+  type RiskTier,
+  type PredictionsColumnar,
+  type OperatingPointDef,
+} from '../../types/alert';
 
 export interface StationDayRecord {
   date: string;
@@ -146,6 +151,28 @@ export const ReplayExplorer: React.FC<ReplayExplorerProps> = ({
   const activeOutcome = activeDay
     ? getDayOutcome(activeDay, operatingPoint.threshold)
     : 'quiet_correctly';
+
+  const [selectedTierFilter, setSelectedTierFilter] = useState<'all' | RiskTier>('all');
+
+  // Station-level tally of risk tiers for eligible days (today PM2.5 <= 90)
+  const tierTally = useMemo(() => {
+    const tally: Record<RiskTier, number> = {
+      Nominal: 0,
+      Watch: 0,
+      Elevated: 0,
+      High: 0,
+    };
+    for (const d of currentStationDays) {
+      if (d.pm25_today <= 90 && d.risk_score !== null && d.risk_score !== undefined) {
+        const t = getRiskTier(d.risk_score);
+        if (t) tally[t.tier] += 1;
+      }
+    }
+    return tally;
+  }, [currentStationDays]);
+
+  const activeTier =
+    activeDay && activeDay.pm25_today <= 90 ? getRiskTier(activeDay.risk_score) : null;
 
   // Keyboard navigation for scrubber
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -297,28 +324,84 @@ export const ReplayExplorer: React.FC<ReplayExplorerProps> = ({
         </div>
       </div>
 
-      {/* Station Tally Strip */}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-[11px] font-mono text-fg-muted mr-1">Station 2019 Tally:</span>
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-600 dark:border-emerald-400/50 font-mono">
-          <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-          <span>Caught: {stationTally.caught}</span>
-        </span>
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-800 dark:text-rose-300 border border-rose-600 dark:border-rose-400/60 font-mono">
-          <XCircle className="w-3 h-3 text-rose-600 dark:text-rose-400" />
-          <span>Missed: {stationTally.missed}</span>
-        </span>
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-600 dark:border-amber-400/60 font-mono">
-          <AlertOctagon className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-          <span>False Alarm: {stationTally.false_alarm}</span>
-        </span>
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-subtle text-slate-700 dark:text-slate-200 border border-slate-500 dark:border-slate-400/60 font-mono">
-          <ShieldCheck className="w-3 h-3 text-fg-muted" />
-          <span>Quiet: {stationTally.quiet_correctly}</span>
-        </span>
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-subtle text-slate-700 dark:text-slate-200 border border-slate-500 dark:border-slate-400/60 font-mono">
-          <span>Already Poor: {stationTally.already_poor_today}</span>
-        </span>
+      {/* Station Tally & Operational Risk Tiers Bar */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-[11px] font-mono text-fg-muted mr-1">Alert Outcomes:</span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-600 dark:border-emerald-400/50 font-mono">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+            <span>Caught: {stationTally.caught}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-800 dark:text-rose-300 border border-rose-600 dark:border-rose-400/60 font-mono">
+            <XCircle className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+            <span>Missed: {stationTally.missed}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-600 dark:border-amber-400/60 font-mono">
+            <AlertOctagon className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+            <span>False Alarm: {stationTally.false_alarm}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-subtle text-slate-700 dark:text-slate-200 border border-slate-500 dark:border-slate-400/60 font-mono">
+            <ShieldCheck className="w-3 h-3 text-fg-muted" />
+            <span>Quiet: {stationTally.quiet_correctly}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-subtle text-slate-700 dark:text-slate-200 border border-slate-500 dark:border-slate-400/60 font-mono">
+            <span>Already Poor: {stationTally.already_poor_today}</span>
+          </span>
+        </div>
+
+        {/* Operational Risk Tier Badges with Filter Affordance */}
+        <div className="flex flex-wrap items-center gap-2 text-xs pt-0.5">
+          <span className="text-[11px] font-mono text-fg-muted mr-1">Risk Tiers:</span>
+          <button
+            type="button"
+            onClick={() => setSelectedTierFilter(selectedTierFilter === 'Nominal' ? 'all' : 'Nominal')}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono border transition-all cursor-pointer ${
+              selectedTierFilter === 'Nominal' ? 'ring-2 ring-slate-400 font-bold' : ''
+            } bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/30`}
+            title="Nominal: p < 0.05 (Routine Baseline Monitoring, No Alert)"
+          >
+            <span>Nominal (&lt;0.05): {tierTally.Nominal}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedTierFilter(selectedTierFilter === 'Watch' ? 'all' : 'Watch')}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono border transition-all cursor-pointer ${
+              selectedTierFilter === 'Watch' ? 'ring-2 ring-amber-400 font-bold' : ''
+            } bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-600 dark:border-amber-400/60`}
+            title="Watch: 0.05 ≤ p < 0.22 (Advisory Alert, High Recall ~84%)"
+          >
+            <span>Watch (0.05–0.22): {tierTally.Watch}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedTierFilter(selectedTierFilter === 'Elevated' ? 'all' : 'Elevated')}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono border transition-all cursor-pointer ${
+              selectedTierFilter === 'Elevated' ? 'ring-2 ring-orange-400 font-bold' : ''
+            } bg-orange-500/10 text-orange-800 dark:text-orange-300 border-orange-600 dark:border-orange-400/60`}
+            title="Elevated: 0.22 ≤ p < 0.50 (Actionable Alert, Balanced F₁=0.400)"
+          >
+            <span>Elevated (0.22–0.50): {tierTally.Elevated}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedTierFilter(selectedTierFilter === 'High' ? 'all' : 'High')}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono border transition-all cursor-pointer ${
+              selectedTierFilter === 'High' ? 'ring-2 ring-rose-400 font-bold' : ''
+            } bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-600 dark:border-rose-400/60`}
+            title="High: p ≥ 0.50 (Emergency Alert, Acute Spike High Probability)"
+          >
+            <span>High (≥0.50): {tierTally.High}</span>
+          </button>
+          {selectedTierFilter !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setSelectedTierFilter('all')}
+              className="text-[10px] text-brand-600 dark:text-brand-400 hover:underline cursor-pointer ml-1 font-mono"
+            >
+              Reset Tier Filter
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Interactive Chart or Tabular View */}
@@ -546,38 +629,70 @@ export const ReplayExplorer: React.FC<ReplayExplorerProps> = ({
                 <th className="py-2 px-3 text-right">Model Forecast</th>
                 <th className="py-2 px-3 text-right">Actual Next Day</th>
                 <th className="py-2 px-3 text-right">Risk Score</th>
+                <th className="py-2 px-3 text-center">Risk Tier</th>
                 <th className="py-2 px-3 text-center">Alert Fired</th>
                 <th className="py-2 px-3">Outcome</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-border">
-              {currentStationDays.map((d, i) => {
-                const outcome = getDayOutcome(d, operatingPoint.threshold);
-                const alertFired = d.risk_score !== null && d.risk_score !== undefined && d.risk_score >= operatingPoint.threshold && d.pm25_today <= 90;
-                return (
-                  <tr
-                    key={d.date}
-                    onClick={() => setSelectedDayIdx(i)}
-                    className={`cursor-pointer transition-colors ${
-                      i === selectedDayIdx ? 'bg-brand-500/10' : 'hover:bg-surface-subtle/50'
-                    }`}
-                  >
-                    <td className="py-2 px-3 font-mono">{d.date}</td>
-                    <td className="py-2 px-3 text-right font-mono">{d.pm25_today.toFixed(1)}</td>
-                    <td className="py-2 px-3 text-right font-mono font-semibold text-brand-600 dark:text-brand-400">
-                      {d.pm25_pred_tomorrow.toFixed(1)}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono">{d.pm25_actual_tomorrow.toFixed(1)}</td>
-                    <td className="py-2 px-3 text-right font-mono">{d.risk_score !== null && d.risk_score !== undefined ? d.risk_score.toFixed(2) : '—'}</td>
-                    <td className="py-2 px-3 text-center font-mono">
-                      {alertFired ? 'YES' : 'No'}
-                    </td>
-                    <td className="py-2 px-3 font-medium capitalize">
-                      {outcome.replace(/_/g, ' ')}
-                    </td>
-                  </tr>
-                );
-              })}
+              {currentStationDays
+                .map((d, i) => ({ d, originalIdx: i }))
+                .filter(({ d }) => {
+                  if (selectedTierFilter === 'all') return true;
+                  if (d.pm25_today > 90 || d.risk_score === null || d.risk_score === undefined) return false;
+                  const t = getRiskTier(d.risk_score);
+                  return t?.tier === selectedTierFilter;
+                })
+                .map(({ d, originalIdx }) => {
+                  const outcome = getDayOutcome(d, operatingPoint.threshold);
+                  const alertFired =
+                    d.risk_score !== null &&
+                    d.risk_score !== undefined &&
+                    d.risk_score >= operatingPoint.threshold &&
+                    d.pm25_today <= 90;
+                  const tier = d.pm25_today <= 90 ? getRiskTier(d.risk_score) : null;
+                  return (
+                    <tr
+                      key={d.date}
+                      onClick={() => setSelectedDayIdx(originalIdx)}
+                      className={`cursor-pointer transition-colors ${
+                        originalIdx === selectedDayIdx ? 'bg-brand-500/10' : 'hover:bg-surface-subtle/50'
+                      }`}
+                    >
+                      <td className="py-2 px-3 font-mono">{d.date}</td>
+                      <td className="py-2 px-3 text-right font-mono">{d.pm25_today.toFixed(1)}</td>
+                      <td className="py-2 px-3 text-right font-mono font-semibold text-brand-600 dark:text-brand-400">
+                        {d.pm25_pred_tomorrow.toFixed(1)}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono">{d.pm25_actual_tomorrow.toFixed(1)}</td>
+                      <td className="py-2 px-3 text-right font-mono">
+                        {d.risk_score !== null && d.risk_score !== undefined ? d.risk_score.toFixed(2) : '—'}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        {tier ? (
+                          <span
+                            title={tier.actionText}
+                            className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold border ${tier.badgeBg} ${tier.badgeText} ${tier.badgeBorder}`}
+                          >
+                            {tier.label}
+                          </span>
+                        ) : (
+                          <span className="text-fg-muted font-mono text-[10px]">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-center font-mono">
+                        {alertFired ? (
+                          <span className="font-semibold text-rose-600 dark:text-rose-400">YES</span>
+                        ) : (
+                          <span className="text-fg-muted">No</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 font-medium capitalize">
+                        {outcome.replace(/_/g, ' ')}
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
@@ -635,7 +750,35 @@ export const ReplayExplorer: React.FC<ReplayExplorerProps> = ({
             </div>
             <div>
               <span className="text-[10px] text-fg-muted block">Risk Score</span>
-              <span className="font-semibold text-fg-primary">{activeDay.risk_score !== null && activeDay.risk_score !== undefined ? activeDay.risk_score.toFixed(2) : '— (Already Poor)'}</span>
+              <span className="font-semibold text-fg-primary">
+                {activeDay.risk_score !== null && activeDay.risk_score !== undefined
+                  ? activeDay.risk_score.toFixed(2)
+                  : '— (Already Poor)'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-fg-muted block">Risk Tier</span>
+              {activeTier ? (
+                <span
+                  title={activeTier.actionText}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border ${activeTier.badgeBg} ${activeTier.badgeText} ${activeTier.badgeBorder}`}
+                >
+                  <span>{activeTier.label}</span>
+                  <span className="text-[9px] font-normal opacity-85">({activeTier.rangeLabel})</span>
+                </span>
+              ) : (
+                <span className="font-mono text-fg-muted text-[11px]">— (Already Poor)</span>
+              )}
+            </div>
+            <div>
+              <span className="text-[10px] text-fg-muted block">Tier Role</span>
+              {activeTier ? (
+                <span className="font-medium text-fg-secondary text-[11px]">
+                  {activeTier.operationalRole}
+                </span>
+              ) : (
+                <span className="text-fg-muted text-[11px]">—</span>
+              )}
             </div>
           </div>
 
@@ -675,36 +818,61 @@ export const ReplayExplorer: React.FC<ReplayExplorerProps> = ({
       )}
 
       {/* Legend & Monitoring Health Link */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-[11px] text-fg-muted border-t border-surface-border">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 bg-fg-muted block" />
-            <span>Today PM2.5</span>
+      <div className="flex flex-col space-y-3 pt-3 text-[11px] text-fg-muted border-t border-surface-border">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 bg-fg-muted block" />
+              <span>Today PM2.5</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 bg-brand-500 block" />
+              <span>Model Forecast (t+1)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 border-t border-dashed border-fg-primary block" />
+              <span>Actual Next Day</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-aqi-poor block" />
+              <span>Alert Issued (p ≥ {operatingPoint.threshold.toFixed(2)})</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 bg-brand-500 block" />
-            <span>Model Forecast (t+1)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 border-t border-dashed border-fg-primary block" />
-            <span>Actual Next Day</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-aqi-poor block" />
-            <span>Alert Issued</span>
-          </div>
+
+          {onNavigateToMonitoring && (
+            <button
+              type="button"
+              onClick={() => onNavigateToMonitoring(selectedStationId)}
+              className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+            >
+              <span>View {selectedStationId} in Monitoring Health</span>
+              <ExternalLink className="w-3 h-3" />
+            </button>
+          )}
         </div>
 
-        {onNavigateToMonitoring && (
-          <button
-            type="button"
-            onClick={() => onNavigateToMonitoring(selectedStationId)}
-            className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
-          >
-            <span>View {selectedStationId} in Monitoring Health</span>
-            <ExternalLink className="w-3 h-3" />
-          </button>
-        )}
+        {/* Operational Risk Tier Guide */}
+        <div className="p-2.5 rounded-lg bg-surface-card border border-surface-border flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px]">
+          <span className="font-bold text-fg-primary font-mono text-[10px] uppercase tracking-wide">
+            Operational Risk Tiers:
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+            <span className="w-2 h-2 rounded-full bg-slate-400" />
+            <strong className="font-semibold">Nominal</strong> (p &lt; 0.05, Routine Monitoring · No Alert)
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <strong className="font-semibold">Watch</strong> (0.05 ≤ p &lt; 0.22, Advisory Alert · High Recall)
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-orange-700 dark:text-orange-300">
+            <span className="w-2 h-2 rounded-full bg-orange-500" />
+            <strong className="font-semibold">Elevated</strong> (0.22 ≤ p &lt; 0.50, Actionable Alert · Balanced F₁)
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-rose-700 dark:text-rose-300">
+            <span className="w-2 h-2 rounded-full bg-rose-500" />
+            <strong className="font-semibold">High</strong> (p ≥ 0.50, Emergency Alert · High Confidence)
+          </span>
+        </div>
       </div>
     </section>
   );

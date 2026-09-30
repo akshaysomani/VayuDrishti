@@ -130,7 +130,12 @@ export const ReliabilityCard: React.FC<ReliabilityCardProps> = ({ meta }) => {
           </p>
         </div>
         <div className="pl-6 text-xs text-fg-secondary">
-          <strong>Statistical Derivation:</strong> The model output is a <em>risk score</em> rescaled from continuous regression residual dispersion (formula: <code className="font-mono text-fg-primary">{calibrationInfo.formula}</code> using validation residual sigma = <code className="font-mono text-fg-primary">{calibrationInfo.params.sigma.toFixed(2)}</code>). It represents an operational ranking metric, not an empirical likelihood or physical frequency.
+          <strong>Statistical Derivation:</strong> {calibrationInfo.derivation_explanation ?? 'The model output is a risk score rescaled from predicted probabilities.'}{' '}
+          (Formula: <code className="font-mono text-fg-primary">{calibrationInfo.formula}</code>
+          {calibrationInfo.params?.sigma != null ? (
+            <> using validation residual sigma = <code className="font-mono text-fg-primary">{calibrationInfo.params.sigma.toFixed(2)}</code></>
+          ) : null}
+          ).
         </div>
       </div>
 

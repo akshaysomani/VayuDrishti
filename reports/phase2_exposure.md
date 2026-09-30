@@ -357,4 +357,89 @@ Auditing all 107 reporting stations across 26 cities revealed exactly **one pair
 - **Reason**: Ernakulam is the mainland urban administrative district of the Greater Kochi municipal agglomeration. Both stations currently fall in the unmatched set (`coord_quality = "city_point"`) and thus inherit the same municipal center reference point.
 - **Flagged in JSON**: Both cities have been explicitly flagged in `alert_data.json` under `city_exposure` with `"is_shared_city_point": true` and `"shared_coordinates_with": ["Kochi"]` / `["Ernakulam"]`.
 
+---
+
+## 10. Phase 2f: Approved Alert-Tier Consistency Fix
+
+### 1. Unified Risk Tier Architecture
+To resolve cognitive dissonance between the alerting engine ($p \ge 0.05$) and the legacy risk tier definitions, the risk tiers are formally unified around empirical validation operating points:
+
+| Risk Tier | Probability Range | Operational Meaning | Alert Action | Test Spike Share | Test Base Rate |
+| :--- | :---: | :--- | :---: | :---: | :---: |
+| **Nominal** | $p < 0.05$ | Routine baseline monitoring | **No Alert** | 80.8% of monitor-days | 1.0% |
+| **Watch** | $0.05 \le p < 0.22$ | Advisory alert tier (High-Recall point) | **Alert Fired** (Advisory) | 12.3% of monitor-days | 10.3% |
+| **Elevated** | $0.22 \le p < 0.50$ | Actionable alert tier (Balanced F1 point) | **Alert Fired** (Actionable) | 5.8% of monitor-days | 30.2% |
+| **High** | $p \ge 0.50$ | Emergency alert tier (High acute confidence) | **Alert Fired** (Emergency) | 1.1% of monitor-days | 52.6% |
+
+### 2. Strict Deterministic Boundary Tests
+All six boundary test cases specified in the brief have been verified:
+- **`0.049`** $\rightarrow$ **Nominal, no alert** ($p < 0.05$)
+- **`0.050`** $\rightarrow$ **Watch, alert** ($0.05 \le p < 0.22$)
+- **`0.099`** $\rightarrow$ **Watch, alert** ($0.05 \le p < 0.22$)
+- **`0.220`** $\rightarrow$ **Elevated, alert** ($0.22 \le p < 0.50$)
+- **`0.499`** $\rightarrow$ **Elevated, alert** ($0.22 \le p < 0.50$)
+- **`0.500`** $\rightarrow$ **High, alert** ($p \ge 0.50$)
+
+### 3. Recomputed City Exposure Risk Tier Distribution
+With the updated tier cuts, the distribution of fresh-crossing monitor days across tiers in major cities:
+- **Delhi**: Nominal = 57.5% (10.05M people), Watch = 18.6% (3.24M people), Elevated = 18.8% (3.29M people), High = 5.1% (899K people). Sum = 17.48M (100.0% of 5 km union population).
+- **Mumbai**: Nominal = 76.2% (6.76M people), Watch = 12.0% (1.06M people), Elevated = 11.2% (992K people), High = 0.7% (58K people). Sum = 8.87M (100.0% of 5 km union population).
+- **Kolkata**: Nominal = 69.3% (5.43M people), Watch = 12.4% (972K people), Elevated = 15.9% (1.24M people), High = 2.4% (188K people). Sum = 7.83M (100.0% of 5 km union population).
+
+---
+
+## 11. Phase 2 Closure: Coordinate Quality Audit & Override Verification
+
+### 1. Coordinate Matching & Override Architecture
+- **Precedence Hierarchy**:
+  1. `scripts/coordinates_override.csv` (`coord_quality = "manual"`): Highest priority, overrides automatic matches, duplicates, and suspect fallbacks.
+  2. Verified CPCB station matches (`coord_quality = "station"`): Automatic exact name/token matches against `ML_OUTPUT/cpcb_daily_clean.parquet`.
+  3. Suspect matches (`coord_quality = "suspect"`): Reverted to municipal center reference point to avoid spatial corruption when raw records are erroneous or unverified duplicates.
+  4. Unmatched fallback (`coord_quality = "city_point"`): Stations lacking distinct ground monitor coordinates retain municipal centroid.
+- **Robust NaN/Blank Handling**: The override loader strictly ignores empty or non-numeric strings, allowing unresolved stations in template files to safely preserve their default category without crashing.
+
+### 2. Final Station Coordinate Breakdown (107 Reporting Monitors)
+- **Verified Station Coordinates**: **83 stations (77.6%)**
+  - Automatic CPCB exact matches: 72 stations
+  - Manual overrides from authoritative sources (`coordinates_override.csv`): 11 stations
+    - `WB013` (Victoria, Kolkata): `cpcb_data/pm25_ccr_copy/WB_Kolkata_Victoria.csv` (22.56557, 88.37021)
+    - `PB001` (Golden Temple, Amritsar): `cpcb_data/pm25_ccr_copy/Punjab_Amritsar.csv` (31.634, 74.8723)
+    - `OD001` (GM Office, Brajrajnagar): `cpcb_data/pm25_ccr_copy/Odisha_Braj.csv` (21.8285, 83.9176)
+    - `OD002` (Talcher Coalfields, Talcher): `cpcb_data/pm25_ccr_copy/Odisha_Talcher.csv` (20.9501, 85.2168)
+    - `ML001` (Lumpyngngad, Shillong): `cpcb_data/pm25_ccr_copy/Meghalaya_Shilong.csv` (25.5788, 91.8933)
+    - `AP001` (Secretariat, Amaravati): `ML_OUTPUT/cpcb_daily_clean.parquet` (16.5131, 80.5165)
+    - `AP005` (GVM Corporation, Visakhapatnam): `ML_OUTPUT/cpcb_daily_clean.parquet` (17.6868, 83.2185)
+    - `AS001` (Railway Colony, Guwahati): `ML_OUTPUT/cpcb_daily_clean.parquet` (26.1796, 91.7843)
+    - `DL010` (Dwarka-Sector 8, Delhi): `ML_OUTPUT/cpcb_daily_clean.parquet` (`Delhi_Dwarka_8`, 28.565612, 77.067064)
+    - `DL021` (NSIT Dwarka, Delhi): `ML_OUTPUT/cpcb_daily_clean.parquet` (`Delhi_Dwarka`, 28.597807, 77.073263)
+    - `DL029` (Pusa, Delhi - DPCC): `ML_OUTPUT/cpcb_daily_clean.parquet` (`Delhi_PusaDPCC`, 28.642040, 77.174999)
+- **Suspect / Reverted to City Point**: **7 stations (6.5%)**
+  - Erroneous raw CPCB records preserved at municipal center: `DL002` (Anand Vihar, raw was 22 km west), `DL003` (Ashok Vihar, raw was 28 km southwest), `MH006` (Borivali East, raw was 46 km east in Kalyan), `RJ004` (Adarsh Nagar, raw was 26 km southwest).
+  - Unverified duplicate / co-located entries: `DL030` (Pusa IMD), `TN002` (Manali Village TNPCB), `TN003` (Manali CPCB).
+- **Unmatched / City-Level Fallback**: **17 stations (15.9%)**
+  - Genuinely unresolved stations with zero station-specific CPCB records (`BR005`, `BR006`, `DL009`, `DL013`, `GJ001`, `HR012`, `HR013`, `JH001`, `KL002`, `KL004`, `KL007`, `MP001`, `MZ001`, `TG001`, `TG002`, `TG003`, `TG004`).
+
+### 3. Re-run Sanity Check & Exposure Impact
+
+| City | 2 km Pop | 2 km Density ($\text{pop/km}^2$) | 5 km Pop | 5 km Density ($\text{pop/km}^2$) | 5 km Pop Change | Verification Status |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Delhi** | 6,061,361 | 482,348 | 18,155,814 | 231,167 | +680,034 (+3.9%) | Verified |
+| **Mumbai** | 3,231,967 | 257,192 | 8,866,855 | 112,896 | 0 (Unchanged) | Verified |
+| **Ahmedabad** | 496,426 | 39,504 | 2,726,069 | 34,709 | 0 (Unchanged) | Verified |
+| **Chennai** | 733,941 | 58,405 | 3,180,164 | 40,491 | 0 (Unchanged) | Verified |
+| **Kochi** | 146,145 | 11,630 | 377,140 | 4,802 | 0 (Unchanged) | Verified |
+
+- **Delhi Exposure Increase (+3.9%)**: Attributed strictly to resolving `DL010` (Dwarka Sector 8), `DL021` (NSIT Dwarka), and `DL029` (Pusa DPCC) from the nominal center point to their actual stations in southwest Delhi, widening the non-overlapping 5 km coverage footprint.
+- **Other Overrides**:
+  - Visakhapatnam: 745,962 $\rightarrow$ 847,486 (+13.6%)
+  - Guwahati: 333,267 $\rightarrow$ 373,118 (+12.0%)
+  - Talcher: 80,369 $\rightarrow$ 89,308 (+11.1%)
+  - Amritsar: 636,953 $\rightarrow$ 612,340 (-3.9%)
+  - Amaravati: 30,974 $\rightarrow$ 29,937 (-3.4%)
+  - Brajrajnagar: 119,881 $\rightarrow$ 118,587 (-1.1%)
+  - Shillong: 316,442 $\rightarrow$ 315,506 (-0.3%)
+  - Kolkata: 7,832,620 $\rightarrow$ 7,832,620 (0.0%, Victoria buffer completely encompassed by preexisting monitor network)
+
+
+
 

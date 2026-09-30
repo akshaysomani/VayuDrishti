@@ -751,13 +751,16 @@ def compute_population_buffers(reporting_stations, pop_tiff_path):
     print("-" * 80)
     print(f"{'City':<16} | {'2km Pop':<10} | {'2km Density':<14} | {'5km Pop':<10} | {'5km Density':<14} | Status")
     print("-" * 80)
-    for city in ["Delhi", "Mumbai", "Ahmedabad"]:
+    for city in ["Delhi", "Mumbai", "Ahmedabad", "Chennai", "Kochi"]:
         if city in city_union_pop:
             cp = city_union_pop[city]
             p2 = cp["population_within_2km_of_monitors"]
             p5 = cp["population_within_5km_of_monitors"]
             d2 = round(p2 / (math.pi * 4.0))
             d5 = round(p5 / (math.pi * 25.0))
+            status = "Verified" if p5 > 0 else "No Pop"
+            print(f"{city:<16} | {p2:<10,d} | {d2:<14,d} | {p5:<10,d} | {d5:<14,d} | {status}")
+    print("-" * 80)
     station_pixels_5km = {}
     for s in reporting_stations:
         coord = (round(s["lat"], 4), round(s["lon"], 4))
@@ -892,14 +895,20 @@ def main():
     if override_file.exists():
         over_df = pd.read_csv(override_file)
         over_map = {str(r["station_id"]).strip(): r for _, r in over_df.iterrows()}
+        manual_applied_count = 0
         for s in audited_stations:
             sid = s["id"]
             if sid in over_map:
                 row_o = over_map[sid]
-                s["lat"] = float(row_o["latitude"])
-                s["lon"] = float(row_o["longitude"])
-                s["coord_quality"] = "manual"
-                print(f"Manual coordinate override applied for {sid}: ({s['lat']}, {s['lon']}) [source: {row_o.get('source', 'manual')}]")
+                lat_val = row_o.get("latitude")
+                lon_val = row_o.get("longitude")
+                if pd.notna(lat_val) and str(lat_val).strip() != "" and pd.notna(lon_val) and str(lon_val).strip() != "":
+                    s["lat"] = float(lat_val)
+                    s["lon"] = float(lon_val)
+                    s["coord_quality"] = "manual"
+                    manual_applied_count += 1
+                    print(f"Manual coordinate override applied for {sid}: ({s['lat']}, {s['lon']}) [source: {row_o.get('source', 'manual')}]")
+        print(f"Applied {manual_applied_count} manual coordinate overrides from {override_file.name}.")
 
     # Population exposure buffers using audited station coordinates
     stations_exposure, city_union_pop, station_pixels_5km, raster_valid_data = compute_population_buffers(
@@ -1423,8 +1432,11 @@ def main():
     # Meta Object
     meta_output = {
         "test_period": actual_test_period,
+        "test_year": 2019,
         "train_period": "< 2018-07-01",
+        "train_years": [2015, 2016, 2017, 2018],
         "validation_period": "2018-07-01 to 2019-06-30",
+        "validation_year": 2018,
         "model_name": "Calibrated Logistic Regression on fresh crossings (PM2.5, pm25_lag1, pm25_rolling3, pm25_ratio_90)",
         "alert_definition": "PM2.5-based category (PM2.5 > 90 \u00b5g/m3, CPCB 'Poor' band). Calibrated on fresh crossings (today's PM2.5 <= 90 µg/m³). Days with today's PM2.5 > 90 µg/m³ are labeled 'Already Poor'.",
         "alert_threshold": round(float(selected_threshold), 3),
@@ -1512,8 +1524,9 @@ def main():
     fresh_df = test_df[test_df["status"] == "Fresh Crossing Evaluation"].copy()
     fresh_df["risk_tier"] = pd.cut(
         fresh_df["risk_score"].astype(float),
-        bins=[-np.inf, 0.10, 0.25, 0.50, np.inf],
-        labels=["Nominal", "Watch", "Elevated", "High"]
+        bins=[-np.inf, 0.05, 0.22, 0.50, np.inf],
+        labels=["Nominal", "Watch", "Elevated", "High"],
+        right=False
     )
     city_exposure_summary = {}
     for city, cp in city_union_pop.items():

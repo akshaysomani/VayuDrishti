@@ -8,6 +8,7 @@ import { BaselineComparisonCard } from './alerts/BaselineComparisonCard';
 import { ForecastErrorCard } from './alerts/ForecastErrorCard';
 import { ReplayExplorer } from './alerts/ReplayExplorer';
 import { OperatingPointCard } from './alerts/OperatingPointCard';
+import { CityExposureCard } from './alerts/CityExposureCard';
 import { FireContextPanel } from './alerts/FireContextPanel';
 import { ReliabilityCard } from './alerts/ReliabilityCard';
 import { LimitsSection } from './alerts/LimitsSection';
@@ -32,7 +33,7 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ onNavigateToMonitoring }
       const msg = err instanceof Error ? err.message : String(err);
       return { data: null, error: msg };
     }
-  }, []);
+  }, [alertDataRaw]);
 
   // Selected operating point policy state (defaults to balanced)
   const [selectedOpKey, setSelectedOpKey] = useState<
@@ -118,6 +119,11 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ onNavigateToMonitoring }
           operatingPoint={activeOp}
           onNavigateToMonitoring={onNavigateToMonitoring}
         />
+      </div>
+
+      {/* SECTION D2: City population exposure & operational risk tiers summary */}
+      <div className="alerts-section-card">
+        <CityExposureCard cityExposure={data.city_exposure} />
       </div>
 
       {/* SECTION E: Operating point control & Precision-Recall curves */}

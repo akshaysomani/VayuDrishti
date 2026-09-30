@@ -14,12 +14,12 @@ export interface ProbabilityCalibration {
   type: string;
   calibration_split: string;
   formula: string;
-  params: {
-    distribution: string;
-    sigma: number;
-    threshold_pm25: number;
+  params?: {
+    distribution?: string;
+    sigma?: number;
+    threshold_pm25?: number;
   };
-  derivation_explanation: string;
+  derivation_explanation?: string;
 }
 
 export interface FeaturesMetadata {
@@ -78,9 +78,12 @@ export interface ReliabilityBin {
 }
 
 export interface AlertMeta {
-  test_year: number;
-  train_years: number[];
-  validation_year: number;
+  test_year?: number;
+  test_period?: string;
+  train_years?: number[];
+  train_period?: string;
+  validation_year?: number;
+  validation_period?: string;
   model_name: string;
   alert_definition: string;
   alert_threshold: number;
@@ -358,9 +361,6 @@ export function validateAlertData(data: unknown): asserts data is AlertDataPaylo
 
   const meta = d.meta as Record<string, unknown>;
   const metaKeys = [
-    'test_year',
-    'train_years',
-    'validation_year',
     'model_name',
     'alert_definition',
     'alert_threshold',
@@ -377,6 +377,9 @@ export function validateAlertData(data: unknown): asserts data is AlertDataPaylo
     if (!(mk in meta) || meta[mk] === undefined || meta[mk] === null) {
       throw new Error(`Schema validation error: missing expected path 'meta.${mk}'`);
     }
+  }
+  if (!('test_period' in meta) && !('test_year' in meta)) {
+    throw new Error("Schema validation error: missing expected path 'meta.test_period' or 'meta.test_year'");
   }
 
   const segments = d.segments as Record<string, unknown>;
@@ -445,3 +448,92 @@ export function validateAlertData(data: unknown): asserts data is AlertDataPaylo
     }
   }
 }
+
+export type RiskTier = 'Nominal' | 'Watch' | 'Elevated' | 'High';
+
+export interface RiskTierInfo {
+  tier: RiskTier;
+  label: string;
+  rangeLabel: string;
+  operationalRole: string;
+  actionText: string;
+  alertFired: boolean;
+  colorClass: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+}
+
+/**
+ * Approved Operational Risk Tier Scheme (Phase 2f):
+ * Nominal:    p < 0.05         -> Routine baseline monitoring (No Alert)
+ * Watch:      0.05 <= p < 0.22 -> Advisory alert tier (High Recall, 84.2% sensitivity)
+ * Elevated:   0.22 <= p < 0.50 -> Actionable alert tier (Balanced F1, precision 30.9%)
+ * High:       p >= 0.50        -> Emergency alert tier (High acute spike probability)
+ *
+ * Rules:
+ * 1. Any p >= 0.05 must NEVER display "Nominal".
+ * 2. Watch is the alert/advisory tier.
+ * 3. Elevated is the actionable tier.
+ * 4. High is the emergency tier.
+ */
+export function getRiskTier(riskScore: number | null | undefined): RiskTierInfo | null {
+  if (riskScore === null || riskScore === undefined || isNaN(riskScore)) {
+    return null;
+  }
+  if (riskScore < 0.05) {
+    return {
+      tier: 'Nominal',
+      label: 'Nominal',
+      rangeLabel: 'p < 0.05',
+      operationalRole: 'Routine Baseline Monitoring',
+      actionText: 'No alert issued. Routine air quality tracking.',
+      alertFired: false,
+      colorClass: 'text-slate-600 dark:text-slate-400',
+      badgeBg: 'bg-slate-500/10',
+      badgeText: 'text-slate-700 dark:text-slate-300',
+      badgeBorder: 'border-slate-500/30 dark:border-slate-400/40',
+    };
+  }
+  if (riskScore < 0.22) {
+    return {
+      tier: 'Watch',
+      label: 'Watch',
+      rangeLabel: '0.05 ≤ p < 0.22',
+      operationalRole: 'Advisory Alert',
+      actionText: 'Early advisory alert active. Sensitive groups should prepare.',
+      alertFired: true,
+      colorClass: 'text-amber-600 dark:text-amber-400',
+      badgeBg: 'bg-amber-500/10',
+      badgeText: 'text-amber-800 dark:text-amber-300',
+      badgeBorder: 'border-amber-600 dark:border-amber-400/60',
+    };
+  }
+  if (riskScore < 0.50) {
+    return {
+      tier: 'Elevated',
+      label: 'Elevated',
+      rangeLabel: '0.22 ≤ p < 0.50',
+      operationalRole: 'Actionable Alert',
+      actionText: 'Actionable alert active. Deploy targeted mitigation protocols.',
+      alertFired: true,
+      colorClass: 'text-orange-600 dark:text-orange-400',
+      badgeBg: 'bg-orange-500/10',
+      badgeText: 'text-orange-800 dark:text-orange-300',
+      badgeBorder: 'border-orange-600 dark:border-orange-400/60',
+    };
+  }
+  return {
+    tier: 'High',
+    label: 'High',
+    rangeLabel: 'p ≥ 0.50',
+    operationalRole: 'Emergency Alert',
+    actionText: 'Emergency alert active. High certainty of acute Poor/Severe crossing.',
+    alertFired: true,
+    colorClass: 'text-rose-600 dark:text-rose-400',
+    badgeBg: 'bg-rose-500/10',
+    badgeText: 'text-rose-800 dark:text-rose-300',
+    badgeBorder: 'border-rose-600 dark:border-rose-400/60',
+  };
+}
+

@@ -20,12 +20,12 @@ export const LimitsSection: React.FC<LimitsSectionProps> = ({ meta, segments }) 
       body: 'MODIS instruments (Terra and Aqua polar orbiters) provide only 2 to 4 passes over India per day. Transient agricultural stubble burning events ignited outside these satellite overpass windows are omitted.',
     },
     {
-      title: 'Evaluated on 2019 Only',
-      body: `All reported performance metrics and decision thresholds reflect a single historical evaluation year (${meta.test_year}, ${meta.n_rows.toLocaleString()} rows across reporting ground stations) using a single LightGBM regressor.`,
+      title: 'Evaluated on Historical Split Only',
+      body: `All reported performance metrics and decision thresholds reflect a single historical evaluation window (${meta.test_period ?? meta.test_year}, ${meta.n_rows.toLocaleString()} rows across reporting ground stations) using the calibrated model pipeline.`,
     },
     {
       title: 'Local Retraining & Methodology Variance',
-      body: `The LightGBM model was retrained locally on pre-${meta.test_year} data (train years: ${meta.train_years.join('–')}, validation year: ${meta.validation_year}) for this dashboard release, and continuous MAE results differ from earlier exploratory phases.`,
+      body: `The model was trained locally on pre-test data (train period: ${meta.train_period ?? meta.train_years?.join('–') ?? 'pre-2018'}, validation period: ${meta.validation_period ?? meta.validation_year ?? '2018-2019'}) for this dashboard release, and continuous MAE results differ from earlier exploratory phases.`,
     },
     {
       title: 'Unexplained MAE Performance Gap',

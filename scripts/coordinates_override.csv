@@ -1,0 +1,36 @@
+station_id,name,city,current_lat,current_lon,coord_quality,latitude,longitude,source
+WB013,"Victoria, Kolkata - WBPCB",Kolkata,22.5626,88.363,city_point,22.56557,88.37021,cpcb_data/pm25_ccr_copy/WB_Kolkata_Victoria.csv
+PB001,"Golden Temple, Amritsar - PPCB",Amritsar,31.6223,74.8753,city_point,31.634,74.8723,cpcb_data/pm25_ccr_copy/Punjab_Amritsar.csv
+OD001,"GM Office, Brajrajnagar - OSPCB",Brajrajnagar,21.8167,83.9167,city_point,21.8285,83.9176,cpcb_data/pm25_ccr_copy/Odisha_Braj.csv
+OD002,"Talcher Coalfields,Talcher - OSPCB",Talcher,20.9493,85.2335,city_point,20.9501,85.2168,cpcb_data/pm25_ccr_copy/Odisha_Talcher.csv
+ML001,"Lumpyngngad, Shillong - Meghalaya PCB",Shillong,25.5689,91.8831,city_point,25.5788,91.8933,cpcb_data/pm25_ccr_copy/Meghalaya_Shilong.csv
+AP001,"Secretariat, Amaravati - APPCB",Amaravati,16.514,80.516,city_point,16.5131,80.5165,ML_OUTPUT/cpcb_daily_clean.parquet (AP_amravati)
+AP005,"GVM Corporation, Visakhapatnam - APPCB",Visakhapatnam,17.6801,83.2016,city_point,17.6868,83.2185,ML_OUTPUT/cpcb_daily_clean.parquet (AP_Vishakhapatnam_all)
+AS001,"Railway Colony, Guwahati - APCB",Guwahati,26.1844,91.7458,city_point,26.1796,91.7843,ML_OUTPUT/cpcb_daily_clean.parquet (Assam_Guwahati_all)
+DL010,"Dwarka-Sector 8, Delhi - DPCC",Delhi,28.597807,77.073263,suspect,28.565612,77.067064,ML_OUTPUT/cpcb_daily_clean.parquet (Delhi_Dwarka_8)
+DL021,"NSIT Dwarka, Delhi - CPCB",Delhi,28.597807,77.073263,suspect,28.597807,77.073263,ML_OUTPUT/cpcb_daily_clean.parquet (Delhi_Dwarka)
+DL029,"Pusa, Delhi - DPCC",Delhi,28.64204,77.174999,suspect,28.64204,77.174999,ML_OUTPUT/cpcb_daily_clean.parquet (Delhi_PusaDPCC)
+BR005,"DRM Office Danapur, Patna - BSPCB",Patna,25.5941,85.1356,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+BR006,"Govt. High School Shikarpur, Patna - BSPCB",Patna,25.5941,85.1356,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+DL009,"Dr. Karni Singh Shooting Range, Delhi - DPCC",Delhi,28.6519,77.2315,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+DL013,"IHBAS, Dilshad Garden, Delhi - CPCB",Delhi,28.6519,77.2315,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+GJ001,"Maninagar, Ahmedabad - GPCB",Ahmedabad,23.0258,72.5873,city_point,,,Unresolved: Single municipal record in CPCB; preserved city point
+HR012,"Sector-51, Gurugram - HSPCB",Gurugram,28.4601,77.0263,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+HR013,"Teri Gram, Gurugram - HSPCB",Gurugram,28.4601,77.0263,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+JH001,"Tata Stadium, Jorapokhar - JSPCB",Jorapokhar,23.707,86.4127,city_point,,,Unresolved: No distinct stadium record in CPCB; preserved city point
+KL002,"Kacheripady, Ernakulam - Kerala PCB",Ernakulam,9.9399,76.2602,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+KL004,"Vyttila, Kochi - Kerala PCB",Kochi,9.9399,76.2602,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+KL007,"Kariavattom, Thiruvananthapuram - Kerala PCB",Thiruvananthapuram,8.4855,76.9492,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+MP001,"T T Nagar, Bhopal - MPPCB",Bhopal,23.2547,77.4029,city_point,,,Unresolved: General municipal record in CPCB; preserved city point
+MZ001,"Sikulpuikawn, Aizawl - Mizoram PCB",Aizawl,23.7289,92.7179,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+TG001,"Bollaram Industrial Area, Hyderabad - TSPCB",Hyderabad,17.384,78.4564,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+TG002,"Central University, Hyderabad - TSPCB",Hyderabad,17.384,78.4564,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+TG003,"ICRISAT Patancheru, Hyderabad - TSPCB",Hyderabad,17.384,78.4564,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+TG004,"IDA Pashamylaram, Hyderabad - TSPCB",Hyderabad,17.384,78.4564,city_point,,,Unresolved: No station-specific record in CPCB/CCR; preserved city point
+DL002,"Anand Vihar, Delhi - DPCC",Delhi,28.618821,77.010183,suspect,,,Suspect: Raw CPCB coordinates erroneous (>20km off in West Delhi); preserved city point
+DL003,"Ashok Vihar, Delhi - DPCC",Delhi,28.485269,77.015767,suspect,,,Suspect: Raw CPCB coordinates erroneous (>28km off in Gurugram); preserved city point
+MH006,"Borivali East, Mumbai - MPCB",Mumbai,19.37347,73.177035,suspect,,,Suspect: Raw CPCB coordinates erroneous (>45km off in Kalyan); preserved city point
+RJ004,"Adarsh Nagar, Jaipur - RSPCB",Jaipur,26.819755,75.54355,suspect,,,Suspect: Raw CPCB coordinates erroneous (>26km off southwest); preserved city point
+DL030,"Pusa, Delhi - IMD",Delhi,28.64204,77.174999,suspect,,,Suspect: IMD sensor co-located with DPCC without separate CPCB entry; preserved city point
+TN002,"Manali Village, Chennai - TNPCB",Chennai,13.1779,80.2701,suspect,,,Suspect: Identical duplicate coordinates in CPCB with TN003; preserved city point
+TN003,"Manali, Chennai - CPCB",Chennai,13.1779,80.2701,suspect,,,Suspect: Identical duplicate coordinates in CPCB with TN002; preserved city point
