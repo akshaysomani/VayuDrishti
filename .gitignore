@@ -1,0 +1,54 @@
+# Dependencies & Build
+node_modules/
+dist/
+.agents/
+.system_generated/
+
+# Python cache & logs
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+.ipynb_checkpoints/
+mlruns/
+mlflow.db
+
+# Incomplete downloads
+*.crdownload
+
+# Rasters & Geospatial Data
+*.tif
+*.tiff
+*.nc
+*.zip
+*.gpkg
+*.h5
+*.pbf
+*.osm.pbf
+*.tar.gz
+infrastructure/
+population/
+
+# Large Data Directories & Caches
+ML_OUTPUT/
+archive/
+weather/
+ERA5-Land/
+MODIS_C/
+NASA_VIIRS/
+cpcb_data/
+air_quality/
+rainfall/
+fire/
+smoke/
+/data/
+!src/data/
+beijing+pm2+5+data/
+
+# Large parquet and tabular datasets
+*.parquet
+*.csv
+!scripts/coordinates_override_TEMPLATE.csv
+
+# Scratch directory
+scratch/

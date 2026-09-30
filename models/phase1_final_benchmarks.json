@@ -1,0 +1,27 @@
+{
+  "test_period": "2019-07-01 to 2020-06-30",
+  "fresh_crossing_benchmark": {
+    "test_period": "2019-07-01 to 2020-06-30",
+    "model": "LightGBM",
+    "pr_auc": 0.3156,
+    "budget_5pct_recall": 0.275,
+    "budget_5pct_precision": 0.235,
+    "budget_5pct_f1": 0.253,
+    "framing": "per-month 5% alert budget"
+  },
+  "logistic_regression_benchmark": {
+    "test_period": "2019-07-01 to 2020-06-30",
+    "model": "LogisticRegression",
+    "features": [
+      "PM2.5",
+      "pm25_lag1",
+      "pm25_rolling3",
+      "pm25_ratio_90"
+    ],
+    "pr_auc": 0.3134,
+    "budget_5pct_recall": 0.248,
+    "budget_5pct_precision": 0.229,
+    "budget_5pct_f1": 0.238,
+    "framing": "per-month 5% alert budget"
+  }
+}

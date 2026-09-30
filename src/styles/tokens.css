@@ -1,0 +1,227 @@
+/**
+ * DESIGN SYSTEM TOKENS - India Air-Quality Early-Warning Platform
+ * Architecture: Three-layer structure (Primitive -> Semantic -> Component)
+ * Designed in compliance with WCAG AA contrast, light & dark themes, and reduced-motion standards.
+ */
+
+:root {
+  /* =========================================================================
+     1. PRIMITIVE TOKENS (Raw values)
+     ========================================================================= */
+
+  /* Neutral palette (Cool Slate) */
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --slate-950: #020617;
+
+  /* Primary Brand (Civic Technical Blue - Factual, Public Health Authority) */
+  --brand-primitive-50: #f0f9ff;
+  --brand-primitive-100: #e0f2fe;
+  --brand-primitive-200: #bae6fd;
+  --brand-primitive-500: #0284c7;
+  --brand-primitive-600: #0369a1;
+  --brand-primitive-700: #075985;
+  --brand-primitive-900: #0c4a6e;
+
+  /* AQI Category Primitives (CPCB Standard, adjusted for WCAG AA contrast) */
+  --aqi-raw-good: #059669;          /* 0-50: Emerald */
+  --aqi-raw-satisfactory: #4d7c0f;  /* 51-100: Olive/Lime - adjusted for >= 3:1 WCAG graphical contrast */
+  --aqi-raw-moderate: #d97706;      /* 101-200: Amber */
+  --aqi-raw-poor: #ea580c;          /* 201-300: Orange */
+  --aqi-raw-verypoor: #dc2626;      /* 301-400: Red */
+  --aqi-raw-severe: #881337;        /* 401-500+: Deep Burgundy */
+
+  /* Monitoring Infrastructure Health Primitives (Deliberately separated from AQI hues!) */
+  --monitor-raw-reporting: #0284c7; /* Slate-Cyan: Reporting in dataset */
+  --monitor-raw-partial: #6366f1;   /* Indigo: Partial reporting */
+  --monitor-raw-nodata: #64748b;    /* Cool Gray: No usable data in this dataset */
+  --monitor-raw-gap: #475569;       /* Deep Slate: Unmonitored gap */
+
+  /* Type Scale */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+  --text-3xl: 1.875rem;  /* 30px */
+
+  /* Spacing Scale */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Motion - Durations & Easings */
+  --duration-instant: 75ms;
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-relaxed: 400ms;
+
+  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --easing-accelerate: cubic-bezier(0.4, 0, 1, 1);
+
+  /* =========================================================================
+     2. SEMANTIC TOKENS (Light Theme - Default)
+     ========================================================================= */
+
+  --surface-base: #ffffff;
+  --surface-subtle: #f8fafc;
+  --surface-card: #ffffff;
+  --surface-hover: #f1f5f9;
+  --surface-selected: #e2e8f0;
+
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+
+  --brand-50: var(--brand-primitive-50);
+  --brand-100: var(--brand-primitive-100);
+  --brand-500: var(--brand-primitive-500);
+  --brand-600: var(--brand-primitive-600);
+  --brand-700: var(--brand-primitive-700);
+  --brand-subtle: rgba(2, 132, 199, 0.08);
+
+  /* AQI Semantic tokens */
+  --aqi-good: var(--aqi-raw-good);
+  --aqi-good-bg: rgba(5, 150, 105, 0.12);
+  --aqi-satisfactory: var(--aqi-raw-satisfactory);
+  --aqi-satisfactory-bg: rgba(101, 163, 13, 0.14);
+  --aqi-moderate: var(--aqi-raw-moderate);
+  --aqi-moderate-bg: rgba(217, 119, 6, 0.14);
+  --aqi-poor: var(--aqi-raw-poor);
+  --aqi-poor-bg: rgba(234, 88, 12, 0.14);
+  --aqi-verypoor: var(--aqi-raw-verypoor);
+  --aqi-verypoor-bg: rgba(220, 38, 38, 0.14);
+  --aqi-severe: var(--aqi-raw-severe);
+  --aqi-severe-bg: rgba(136, 19, 55, 0.16);
+
+  /* Monitoring Health Semantic tokens (Distinct from AQI) */
+  --monitor-reporting: var(--monitor-raw-reporting);
+  --monitor-reporting-bg: rgba(2, 132, 199, 0.10);
+  --monitor-partial: var(--monitor-raw-partial);
+  --monitor-partial-bg: rgba(99, 102, 241, 0.10);
+  --monitor-nodata: var(--monitor-raw-nodata);
+  --monitor-nodata-bg: rgba(100, 116, 139, 0.12);
+  --monitor-gap: var(--monitor-raw-gap);
+  --monitor-gap-bg: rgba(71, 85, 105, 0.12);
+  --monitor-unmonitored: #64748b;
+  --monitor-unmonitored-bg: rgba(100, 116, 139, 0.08);
+
+  /* Elevations */
+  --elevation-1: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+  --elevation-2: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.08);
+  --elevation-3: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.08);
+}
+
+/* =========================================================================
+   DARK THEME SEMANTIC TOKENS
+   ========================================================================= */
+
+.dark {
+  --surface-base: #090d16;
+  --surface-subtle: #0f172a;
+  --surface-card: #131d33;
+  --surface-hover: #1e293b;
+  --surface-selected: #334155;
+
+  --border-subtle: #1e293b;
+  --border-strong: #334155;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-inverse: #0f172a;
+
+  --brand-50: #082f49;
+  --brand-100: #0c4a6e;
+  --brand-500: #38bdf8;
+  --brand-600: #0284c7;
+  --brand-700: #0369a1;
+  --brand-subtle: rgba(56, 189, 248, 0.14);
+
+  /* Dark mode AQI Category Colors (High contrast against dark surface) */
+  --aqi-good: #34d399;
+  --aqi-good-bg: rgba(52, 211, 153, 0.18);
+  --aqi-satisfactory: #a3e635;
+  --aqi-satisfactory-bg: rgba(163, 230, 53, 0.18);
+  --aqi-moderate: #fbbf24;
+  --aqi-moderate-bg: rgba(251, 191, 36, 0.18);
+  --aqi-poor: #fb923c;
+  --aqi-poor-bg: rgba(251, 146, 60, 0.18);
+  --aqi-verypoor: #f87171;
+  --aqi-verypoor-bg: rgba(248, 113, 113, 0.18);
+  --aqi-severe: #f43f5e;
+  --aqi-severe-bg: rgba(244, 63, 94, 0.22);
+
+  /* Dark mode Monitoring Health Tokens */
+  --monitor-reporting: #38bdf8;
+  --monitor-reporting-bg: rgba(56, 189, 248, 0.15);
+  --monitor-partial: #818cf8;
+  --monitor-partial-bg: rgba(129, 140, 248, 0.15);
+  --monitor-nodata: #94a3b8;
+  --monitor-nodata-bg: rgba(148, 163, 184, 0.15);
+  --monitor-gap: #cbd5e1;
+  --monitor-gap-bg: rgba(203, 213, 225, 0.15);
+  --monitor-unmonitored: #94a3b8;
+  --monitor-unmonitored-bg: rgba(148, 163, 184, 0.12);
+
+  /* Heatmap ramp (dark mode overrides — light-mode uses inline defaults) */
+  --heatmap-zero-border: #64748b;
+  --heatmap-fill-0: #0369a1;
+  --heatmap-border-0: #0284c7;
+  --heatmap-fill-1: #0284c7;
+  --heatmap-border-1: #0369a1;
+  --heatmap-fill-2: #0ea5e9;
+  --heatmap-border-2: #38bdf8;
+  --heatmap-fill-3: #7dd3fc;
+  --heatmap-border-3: #bae6fd;
+
+  /* Elevations */
+  --elevation-1: 0 1px 3px 0 rgb(0 0 0 / 0.35);
+  --elevation-2: 0 4px 6px -1px rgb(0 0 0 / 0.45);
+  --elevation-3: 0 10px 15px -3px rgb(0 0 0 / 0.55);
+}
+
+/* =========================================================================
+   REDUCED MOTION SUPPORT (WCAG AA)
+   ========================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

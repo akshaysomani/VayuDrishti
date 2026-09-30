@@ -1,0 +1,39 @@
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    color: var(--text-primary);
+    background-color: var(--surface-base);
+  }
+
+  /* Keyboard accessibility focus rings */
+  :focus-visible {
+    outline: 2px solid var(--brand-500);
+    outline-offset: 2px;
+  }
+}
+
+/* Accessibility helper: Skip to main content link */
+.skip-link {
+  position: absolute;
+  top: -999px;
+  left: 1rem;
+  z-index: 100;
+  background-color: var(--surface-card);
+  color: var(--text-primary);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--brand-500);
+  box-shadow: var(--elevation-3);
+  font-weight: 600;
+  transition: top var(--duration-fast) var(--easing-standard);
+}
+
+.skip-link:focus {
+  top: 1rem;
+}

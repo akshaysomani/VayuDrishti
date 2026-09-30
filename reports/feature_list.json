@@ -1,0 +1,86 @@
+{
+  "features": [
+    "PM2.5",
+    "pm25_lag1",
+    "pm25_lag2",
+    "pm25_rolling3",
+    "u10",
+    "v10",
+    "wind_speed",
+    "t2m",
+    "blh",
+    "fire_count_100km",
+    "fire_frp_100km",
+    "upwind_fire_count_100km",
+    "upwind_frp_100km",
+    "month",
+    "dayofweek",
+    "dayofyear"
+  ],
+  "shap_ranking": [
+    {
+      "feature": "PM2.5",
+      "mean_abs_shap": 1.8914244533385551
+    },
+    {
+      "feature": "pm25_rolling3",
+      "mean_abs_shap": 0.4666534469476937
+    },
+    {
+      "feature": "pm25_lag2",
+      "mean_abs_shap": 0.26829049808995503
+    },
+    {
+      "feature": "pm25_lag1",
+      "mean_abs_shap": 0.20769235111643092
+    },
+    {
+      "feature": "blh",
+      "mean_abs_shap": 0.18033772793474062
+    },
+    {
+      "feature": "u10",
+      "mean_abs_shap": 0.12773485990796357
+    },
+    {
+      "feature": "v10",
+      "mean_abs_shap": 0.11007373509314837
+    },
+    {
+      "feature": "dayofyear",
+      "mean_abs_shap": 0.10315024969664514
+    },
+    {
+      "feature": "t2m",
+      "mean_abs_shap": 0.08241253473167831
+    },
+    {
+      "feature": "dayofweek",
+      "mean_abs_shap": 0.059613947158972176
+    },
+    {
+      "feature": "wind_speed",
+      "mean_abs_shap": 0.0367885755516437
+    },
+    {
+      "feature": "fire_frp_100km",
+      "mean_abs_shap": 0.030557657804849696
+    },
+    {
+      "feature": "month",
+      "mean_abs_shap": 0.014091760590711157
+    },
+    {
+      "feature": "fire_count_100km",
+      "mean_abs_shap": 0.013476119169430438
+    },
+    {
+      "feature": "upwind_frp_100km",
+      "mean_abs_shap": 0.012448782711016664
+    },
+    {
+      "feature": "upwind_fire_count_100km",
+      "mean_abs_shap": 0.0032816055754586685
+    }
+  ]
+}
