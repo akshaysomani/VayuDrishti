@@ -43,14 +43,21 @@ import {
   signWebhookPayload,
   sendWebhookAlert,
 } from '../src/server/channels/webhookChannel';
-import { escapeHtml, renderEmailContent } from '../src/server/channels/emailChannel';
+import { escapeHtml, renderEmailContent, sendEmailAlert } from '../src/server/channels/emailChannel';
 import {
   PostgresAlertDeliveryStore,
   scrubSensitiveErrorInfo,
   maskDestination,
 } from '../src/server/storage/alertDeliveryStore';
-import { AlertDispatcher } from '../src/server/services/alertDispatcher';
-import { handleAlertDeliveryRequest } from '../src/server/alertDeliveryHandler';
+import {
+  AlertDispatcher,
+  generateDeliveryIdempotencyKey,
+  validateAlertSafetyConfig,
+} from '../src/server/services/alertDispatcher';
+import {
+  handleAlertDeliveryRequest,
+  resetAuthRateLimiterForTesting,
+} from '../src/server/alertDeliveryHandler';
 import { prepareTestDatabase, truncateTestDatabase } from '../src/server/db/testDbHelper';
 import type { LiveAlertPayload } from '../src/types/liveAlert';
 import type { RecipientRecord, StructuredAlertMessage } from '../src/types/alertDelivery';
@@ -736,9 +743,13 @@ async function runTestSuite() {
       assert('counts_by_status' in data, 'Public stats includes counts_by_status');
       assert('active_recipients' in data, 'Public stats includes active_recipients count');
 
-      // Check deliveries are masked
+      // Check deliveries are strictly minimized (zero recipient destination/name fields)
       for (const del of data.recent_deliveries || []) {
-        assert(!del.recipient_destination.includes('@'), 'Email recipient destination is masked for public view');
+        assert(!('recipient_destination' in del), 'Public recent_deliveries has no recipient_destination field');
+        assert(!('recipient_name' in del), 'Public recent_deliveries has no recipient_name field');
+        assert('station' in del, 'Public recent_deliveries includes station');
+        assert('tier' in del, 'Public recent_deliveries includes tier');
+        assert('timestamp' in del, 'Public recent_deliveries includes timestamp');
       }
     } finally {
       server.close();
@@ -821,6 +832,701 @@ async function runTestSuite() {
     const pm25 = 180.0;
     const ratio = pm25 / 90.0;
     assert(ratio === 2.0, 'pm25_ratio_90 is strictly PM2.5 / 90.0');
+  }
+
+  // ===========================================================================
+  // SECTION 5: PHASE 5 f4 HARDENING ITEMS (1-7)
+  // ===========================================================================
+  console.log('\n================================================================');
+  console.log('SECTION 5: HARDENING SUITE (ITEMS 1-7)');
+  console.log('================================================================\n');
+
+  console.log('TEST 16: Stuck-Sending Lease Timeout & Race-Safe Recovery (Item 1)');
+  {
+    const client = (store as any).pool;
+    await client.query('DELETE FROM alert_outbox;');
+
+    const mockPayload: StructuredAlertMessage = {
+      alert_id: 'test_alert_id',
+      station_id: 'DL001',
+      station_name: 'Anand Vihar',
+      city: 'Delhi',
+      probability: 0.85,
+      tier: 'High',
+      expected_people_exposed: 100000,
+      coord_quality: 'station',
+      source_observation_timestamp: new Date().toISOString(),
+      model_version: 'v1.0.0',
+      dashboard_url: 'https://vayudrishti.org/dashboard',
+      disclaimer: 'Model-based early-warning estimate, not a confirmed measurement.',
+    };
+
+    const dedupeKey = `lease_test_${Date.now()}`;
+    const insertRes = await store.queueOutboxAlert({
+      station_id: 'DL001',
+      station_name: 'Anand Vihar',
+      city: 'Delhi',
+      probability: 0.85,
+      tier: 'High',
+      source_observation_timestamp: new Date().toISOString(),
+      model_version: 'v1.0.0',
+      coord_quality: 'station',
+      expected_people_exposed: 100000,
+      payload: mockPayload,
+      dedupe_key: dedupeKey,
+      status: 'PENDING',
+      max_attempts: 3,
+      next_attempt_at: new Date(Date.now() - 5000).toISOString(),
+    });
+    assert(insertRes.queued, 'Outbox item queued for lease testing');
+    const outboxId = insertRes.outboxId!;
+
+    // Claim pending outbox items (sets status=SENDING and lease_expires_at)
+    const claimed = await store.claimPendingOutboxItems(10, 120);
+    const claimedItem = claimed.find((item) => item.id === outboxId);
+    assert(!!claimedItem, 'Item claimed into SENDING state');
+    assert(claimedItem?.status === 'SENDING', 'Claimed item status is SENDING');
+    assert(!!claimedItem?.lease_expires_at, 'Claimed item has lease_expires_at set');
+
+    // Reclaim while lease is active should do NOTHING
+    const reclaimedActive = await store.reclaimStuckLeases();
+    assert(reclaimedActive.reclaimed === 0 && reclaimedActive.deadLettered === 0, 'Active lease is not reclaimed prematurely');
+
+    // Manually expire the lease in PostgreSQL
+    await client.query(
+      `UPDATE alert_outbox SET lease_expires_at = NOW() - INTERVAL '10 seconds' WHERE id = $1`,
+      [outboxId]
+    );
+
+    // Reclaim expired lease -> returns to PENDING with attempts=1 and exponential backoff
+    const reclaimedExpired = await store.reclaimStuckLeases();
+    assert(reclaimedExpired.reclaimed >= 1, 'Expired lease row reclaimed');
+    const rowAfterReclaim = await store.getOutboxItemById(outboxId);
+    assert(rowAfterReclaim?.status === 'PENDING', 'Reclaimed row returned to PENDING');
+    assert(rowAfterReclaim?.attempts === 1, 'Attempts counter incremented to 1');
+    assert(new Date(rowAfterReclaim!.next_attempt_at) > new Date(), 'Next attempt scheduled in future with backoff');
+
+    // Max attempts exceeded -> transitions to DEAD
+    await client.query(
+      `UPDATE alert_outbox SET status = 'SENDING', attempts = 3, lease_expires_at = NOW() - INTERVAL '10 seconds' WHERE id = $1`,
+      [outboxId]
+    );
+    const reclaimedDead = await store.reclaimStuckLeases();
+    assert(reclaimedDead.deadLettered >= 1, 'Row with max attempts transitioned to DEAD');
+    const rowDead = await store.getOutboxItemById(outboxId);
+    assert(rowDead?.status === 'DEAD', 'Outbox status is DEAD in database');
+    assert(rowDead?.last_error?.toLowerCase().includes('lease expired') ?? false, 'Dead outbox row records lease expiration error');
+
+    // Race safety: concurrent reclaim calls do not double-reclaim
+    const dedupeRace = `lease_race_${Date.now()}`;
+    const raceItem = await store.queueOutboxAlert({
+      station_id: 'DL001',
+      station_name: 'Anand Vihar',
+      city: 'Delhi',
+      probability: 0.85,
+      tier: 'High',
+      source_observation_timestamp: new Date().toISOString(),
+      model_version: 'v1.0.0',
+      coord_quality: 'station',
+      expected_people_exposed: 100000,
+      payload: mockPayload,
+      dedupe_key: dedupeRace,
+      status: 'SENDING',
+      max_attempts: 3,
+      next_attempt_at: new Date().toISOString(),
+    });
+    await client.query(
+      `UPDATE alert_outbox SET lease_expires_at = NOW() - INTERVAL '10 seconds' WHERE id = $1`,
+      [raceItem.outboxId!]
+    );
+
+    const [reclaimRes1, reclaimRes2] = await Promise.all([
+      store.reclaimStuckLeases(),
+      store.reclaimStuckLeases(),
+    ]);
+    const totalReclaimed = reclaimRes1.reclaimed + reclaimRes2.reclaimed;
+    assert(totalReclaimed === 1, 'Race-safe: exactly one concurrent worker reclaimed the expired item');
+  }
+
+  console.log('\nTEST 17: Idempotency Keys for Webhook and Email Channels (Item 2)');
+  {
+    const dedupeKey = 'test_station_2026_01_01_00_High';
+    const recipientId = '550e8400-e29b-41d4-a716-446655440000';
+    const key1 = generateDeliveryIdempotencyKey(dedupeKey, recipientId);
+    const key2 = generateDeliveryIdempotencyKey(dedupeKey, recipientId);
+
+    assert(key1 === key2, 'Idempotency key is strictly deterministic for identical dedupe_key and recipient_id');
+    assert(/^[a-f0-9]{64}$/.test(key1), 'Idempotency key is a valid SHA-256 hex digest');
+    assert(!key1.includes(dedupeKey), 'Idempotency key is a non-reversible hash');
+
+    // Webhook receiver idempotency verification
+    let receivedHeaders: any = {};
+    let receivedPayload: any = {};
+    let rawBody = '';
+    const webhookServer = http.createServer((req, res) => {
+      rawBody = '';
+      req.on('data', (c) => { rawBody += c; });
+      req.on('end', () => {
+        receivedHeaders = req.headers;
+        try {
+          receivedPayload = JSON.parse(rawBody);
+        } catch {
+          receivedPayload = {};
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      });
+    });
+    await new Promise<void>((resolve) => webhookServer.listen(0, '127.0.0.1', () => resolve()));
+    const whPort = (webhookServer.address() as any).port;
+
+    const signingSecret = 'test_webhook_signing_secret_32bytes_long!';
+    process.env.ALERT_WEBHOOK_SIGNING_SECRET = signingSecret;
+    process.env.ALERT_ALLOW_PRIVATE_WEBHOOKS = 'true';
+
+    const mockMsg: StructuredAlertMessage = {
+      alert_id: 'test_alert_id',
+      station_id: 'DL001',
+      station_name: 'Anand Vihar',
+      city: 'Delhi',
+      probability: 0.75,
+      tier: 'High',
+      expected_people_exposed: 100000,
+      coord_quality: 'station',
+      source_observation_timestamp: new Date().toISOString(),
+      model_version: 'v1.0.0',
+      dashboard_url: 'https://vayudrishti.org/dashboard',
+      disclaimer: 'Model-based early-warning estimate, not a confirmed measurement.',
+    };
+
+    const recipient: RecipientRecord = {
+      id: recipientId,
+      name: 'Test Officer',
+      channel: 'webhook',
+      destination: `http://127.0.0.1:${whPort}/webhook`,
+      scope_type: 'all',
+      min_tier: 'ELEVATED',
+      active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const sendRes = await sendWebhookAlert(recipient, mockMsg, key1);
+    assert(sendRes.success, 'Webhook delivery succeeded');
+    assert(receivedHeaders['idempotency-key'] === key1, 'Webhook request includes Idempotency-Key header');
+    assert(receivedPayload.delivery_id === key1, 'Webhook body includes delivery_id equal to idempotency key');
+    assert(receivedPayload.idempotency_key === key1, 'Webhook body includes idempotency_key');
+
+    // Signature covers the idempotency key in the body
+    const sigHeader = receivedHeaders['x-vayudrishti-signature'];
+    const receivedTimestamp = receivedHeaders['x-vayudrishti-timestamp'];
+    const rawSig = sigHeader.startsWith('sha256=') ? sigHeader.slice(7) : sigHeader;
+    const expectedSig = signWebhookPayload(signingSecret, receivedTimestamp, rawBody);
+    assert(rawSig === expectedSig, 'HMAC signature validates correctly over body containing delivery_id/idempotency_key');
+
+    await new Promise<void>((resolve) => webhookServer.close(() => resolve()));
+  }
+
+  console.log('\nTEST 18: Soft-Delete Recipients & Audit Log Preservation (Item 3)');
+  {
+    const server = http.createServer((req, res) => handleAlertDeliveryRequest(req, res));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const port = (server.address() as any).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    const dest = `https://authority_${Date.now()}.gov.in/webhook`;
+    const recipient = await store.createRecipient({
+      name: 'Authority Under Decommission',
+      channel: 'webhook',
+      destination: dest,
+      scope_type: 'all',
+      min_tier: 'ELEVATED',
+      active: true,
+    });
+
+    // Create a real outbox row to satisfy foreign key constraint
+    const outboxItem = await store.queueOutboxAlert({
+      station_id: 'DL001',
+      station_name: 'Anand Vihar',
+      city: 'Delhi',
+      probability: 0.85,
+      tier: 'High',
+      source_observation_timestamp: new Date().toISOString(),
+      model_version: 'v1.0.0',
+      coord_quality: 'station',
+      expected_people_exposed: 100000,
+      payload: {
+        alert_id: 'test_alert',
+        station_id: 'DL001',
+        station_name: 'Anand Vihar',
+        city: 'Delhi',
+        probability: 0.85,
+        tier: 'High',
+        expected_people_exposed: 100000,
+        coord_quality: 'station',
+        source_observation_timestamp: new Date().toISOString(),
+        model_version: 'v1.0.0',
+        dashboard_url: 'https://vayudrishti.org/dashboard',
+        disclaimer: 'test',
+      },
+      dedupe_key: `audit_preserve_dedupe_${Date.now()}`,
+      status: 'SENT',
+      max_attempts: 3,
+      next_attempt_at: new Date().toISOString(),
+    });
+
+    // Insert an audit log record referencing this recipient
+    await store.recordDelivery({
+      outbox_id: outboxItem.outboxId!,
+      recipient_id: recipient.id,
+      channel: 'webhook',
+      recipient_destination: dest,
+      status: 'SENT',
+      provider_response_code: 200,
+      provider_response_body: 'OK',
+      error_message: null,
+    });
+
+    // 1. DELETE via admin endpoint
+    const resDel = await fetch(`${baseUrl}/api/alerts/delivery/admin/recipients/${recipient.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${process.env.ALERT_ADMIN_TOKEN}` },
+    });
+    assert(resDel.status === 200, 'DELETE endpoint returns 200 OK');
+
+    // 2. Row remains in database (soft delete)
+    const client = (store as any).pool;
+    const dbRow = (await client.query('SELECT * FROM recipients WHERE id = $1', [recipient.id])).rows[0];
+    assert(!!dbRow, 'Recipient row is preserved in DB (not hard-deleted)');
+    assert(dbRow.deleted_at !== null, 'Recipient deleted_at is populated');
+    assert(dbRow.active === false, 'Recipient active is set to false');
+
+    // 3. Excluded from store.listRecipients()
+    const activeList = await store.listRecipients();
+    assert(!activeList.some((r) => r.id === recipient.id), 'Soft-deleted recipient excluded from listRecipients');
+
+    // 4. Excluded from active recipients (fan-out matching)
+    const activeRecipients = await store.listRecipients(true);
+    assert(!activeRecipients.some((r) => r.id === recipient.id), 'Soft-deleted recipient excluded from active list/fan-out');
+
+    // 5. PATCH returns 409 Conflict
+    const resPatch = await fetch(`${baseUrl}/api/alerts/delivery/admin/recipients/${recipient.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.ALERT_ADMIN_TOKEN}`,
+      },
+      body: JSON.stringify({ active: true }),
+    });
+    assert(resPatch.status === 409, 'PATCH on soft-deleted recipient returns 409 Conflict');
+
+    // 6. Test-alert on soft-deleted recipient fails
+    const resTestAlert = await fetch(`${baseUrl}/api/alerts/delivery/admin/test-alert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.ALERT_ADMIN_TOKEN}`,
+      },
+      body: JSON.stringify({ recipient_id: recipient.id, station_id: 'DL001' }),
+    });
+    assert(resTestAlert.status === 404, 'Test-alert cannot target soft-deleted recipient (404)');
+
+    // 7. Audit log record remains intact (no cascade deletion)
+    const auditRows = (await client.query('SELECT * FROM alert_deliveries WHERE recipient_id = $1', [recipient.id])).rows;
+    assert(auditRows.length === 1, 'Audit log deliveries preserved with reference to soft-deleted recipient');
+
+    // 8. Re-adding the same address succeeds due to partial unique index
+    const resRecreate = await fetch(`${baseUrl}/api/alerts/delivery/admin/recipients`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.ALERT_ADMIN_TOKEN}`,
+      },
+      body: JSON.stringify({
+        name: 'Recommissioned Authority',
+        channel: 'webhook',
+        destination: dest,
+        scope_type: 'all',
+        min_tier: 'ELEVATED',
+        active: true,
+      }),
+    });
+    assert(resRecreate.status === 201, 'Re-registering same destination after soft-delete succeeds (201 Created)');
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+
+  console.log('\nTEST 19: Public Stats Strict Minimization & PII/Host Body Scanner (Item 4)');
+  {
+    const server = http.createServer((req, res) => handleAlertDeliveryRequest(req, res));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const port = (server.address() as any).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    const secretHost = 'surveillance-telemetry.delhi-env-authority.gov.in';
+    const secretDest = `https://${secretHost}/v1/alerts/inbound`;
+
+    const outboxItem = await store.queueOutboxAlert({
+      station_id: 'DL001',
+      station_name: 'Anand Vihar',
+      city: 'Delhi',
+      probability: 0.85,
+      tier: 'High',
+      source_observation_timestamp: new Date().toISOString(),
+      model_version: 'v1.0.0',
+      coord_quality: 'station',
+      expected_people_exposed: 100000,
+      payload: {
+        alert_id: 'test_alert_scan',
+        station_id: 'DL001',
+        station_name: 'Anand Vihar',
+        city: 'Delhi',
+        probability: 0.85,
+        tier: 'High',
+        expected_people_exposed: 100000,
+        coord_quality: 'station',
+        source_observation_timestamp: new Date().toISOString(),
+        model_version: 'v1.0.0',
+        dashboard_url: 'https://vayudrishti.org/dashboard',
+        disclaimer: 'test',
+      },
+      dedupe_key: `audit_scan_dedupe_${Date.now()}`,
+      status: 'SENT',
+      max_attempts: 3,
+      next_attempt_at: new Date().toISOString(),
+    });
+
+    await store.recordDelivery({
+      outbox_id: outboxItem.outboxId!,
+      recipient_id: null,
+      channel: 'webhook',
+      recipient_destination: secretDest,
+      status: 'SENT',
+      provider_response_code: 200,
+      provider_response_body: 'OK',
+      error_message: null,
+    });
+
+    const resPublic = await fetch(`${baseUrl}/api/alerts/delivery/stats`);
+    const rawPublicBody = await resPublic.text();
+
+    assert(!rawPublicBody.includes(secretHost), 'Public stats body does NOT contain destination host');
+    assert(!rawPublicBody.includes('surveillance-telemetry'), 'Public stats body does NOT contain destination subdomain');
+    assert(!rawPublicBody.includes('inbound'), 'Public stats body does NOT contain destination path');
+    assert(!rawPublicBody.includes('@'), 'Public stats body does NOT contain email @ sign');
+    assert(!rawPublicBody.includes('recipient_destination'), 'Public stats body does NOT contain recipient_destination key');
+    assert(!rawPublicBody.includes('recipient_name'), 'Public stats body does NOT contain recipient_name key');
+
+    // Admin deliveries endpoint DOES contain full detail
+    const resAdmin = await fetch(`${baseUrl}/api/alerts/delivery/admin/deliveries`, {
+      headers: { Authorization: `Bearer ${process.env.ALERT_ADMIN_TOKEN}` },
+    });
+    const adminData = await resAdmin.json();
+    assert(adminData.deliveries?.length > 0, 'Admin deliveries endpoint returns records');
+    assert(
+      adminData.deliveries.some((d: any) => d.recipient_destination?.includes('delhi-env-authority')),
+      'Admin endpoint provides unmasked/detailed destinations'
+    );
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+
+  console.log('\nTEST 20: Real Local SMTP Sink Tests with smtp-server (Item 5)');
+  {
+    const { SMTPServer } = await import('smtp-server');
+
+    // 1. Success Sink with test-only credentials
+    const testUser = `user_${crypto.randomBytes(4).toString('hex')}`;
+    const testPass = `pass_${crypto.randomBytes(8).toString('hex')}`;
+    const receivedEmails: string[] = [];
+
+    const smtpSink = new SMTPServer({
+      secure: false,
+      disabledCommands: ['STARTTLS'],
+      authOptional: false,
+      onAuth(auth, session, callback) {
+        if (auth.username === testUser && auth.password === testPass) {
+          return callback(null, { user: auth.username });
+        }
+        return callback(new Error('Invalid test auth'));
+      },
+      onData(stream, session, callback) {
+        let chunks: Buffer[] = [];
+        stream.on('data', (c) => chunks.push(c));
+        stream.on('end', () => {
+          receivedEmails.push(Buffer.concat(chunks).toString('utf8'));
+          callback(null);
+        });
+      },
+    });
+
+    await new Promise<void>((resolve) => smtpSink.listen(0, '127.0.0.1', () => resolve()));
+    const sinkPort = (smtpSink.server.address() as any).port;
+
+    process.env.SMTP_HOST = '127.0.0.1';
+    process.env.SMTP_PORT = String(sinkPort);
+    process.env.SMTP_USER = testUser;
+    process.env.SMTP_PASS = testPass;
+
+    const emailRecipient: RecipientRecord = {
+      id: 'smtp_test_recip',
+      name: 'Commissioner Office',
+      channel: 'email',
+      destination: 'commissioner@cpcb.test.local',
+      scope_type: 'all',
+      min_tier: 'ELEVATED',
+      active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Inject <script> in station name and city to assert HTML escaping
+    const injectionMsg: StructuredAlertMessage = {
+      alert_id: 'smtp_alert_001',
+      station_id: 'DL001',
+      station_name: 'Anand Vihar <script>alert("station_xss")</script>',
+      city: 'Delhi <img src=x onerror=alert(1)>',
+      probability: 0.92,
+      tier: 'High',
+      expected_people_exposed: 250000,
+      coord_quality: 'station',
+      source_observation_timestamp: '2026-10-01T12:00:00Z',
+      model_version: 'v1.0.0',
+      dashboard_url: 'https://vayudrishti.org/dash',
+      disclaimer: 'Model-based early-warning estimate, not a confirmed measurement. Automated advisory by VayuDrishti.',
+    };
+
+    const idempKey = 'smtp_idemp_key_12345';
+    const sendRes = await sendEmailAlert(emailRecipient, injectionMsg, idempKey);
+    assert(sendRes.success, 'Email sent successfully to real SMTP sink');
+    assert(receivedEmails.length === 1, 'SMTP sink received 1 email');
+
+    const emailRaw = receivedEmails[0];
+    assert(
+      emailRaw.includes('Message-ID: <smtp_idemp_key_12345@alerts.vayudrishti.org>') ||
+        emailRaw.includes('smtp_idemp_key_12345@alerts.vayudrishti.org'),
+      'Deterministic Message-ID header present'
+    );
+    assert(
+      emailRaw.includes('Model-based early-warning estimate, not a confirmed measurement'),
+      'Mandatory disclaimer present in email content'
+    );
+    const htmlPart = emailRaw.split('Content-Type: text/html')[1] || '';
+    assert(
+      htmlPart.includes('&lt;script&gt;alert(&quot;station_xss&quot;)&lt;/script&gt;') ||
+        htmlPart.includes('&lt;script&gt;'),
+      'Dynamic station_name is HTML escaped in HTML part'
+    );
+    assert(
+      htmlPart.includes('&lt;img src=x onerror=alert(1)&gt;') ||
+        htmlPart.includes('&lt;img'),
+      'Dynamic city is HTML escaped in HTML part'
+    );
+    assert(!htmlPart.includes('<script>alert'), 'Unescaped script tags strictly absent from HTML part');
+
+    await new Promise<void>((resolve) => smtpSink.close(() => resolve()));
+
+    // 2. Rejecting Sink (550 User Unknown)
+    const rejectSink = new SMTPServer({
+      secure: false,
+      disabledCommands: ['STARTTLS'],
+      authOptional: true,
+      onRcptTo(address, session, callback) {
+        return callback(new Error('550 Recipient address rejected: User unknown'));
+      },
+    });
+    await new Promise<void>((resolve) => rejectSink.listen(0, '127.0.0.1', () => resolve()));
+    const rejectPort = (rejectSink.server.address() as any).port;
+    process.env.SMTP_PORT = String(rejectPort);
+
+    const rejectRes = await sendEmailAlert(emailRecipient, injectionMsg);
+    assert(!rejectRes.success, 'Rejecting sink returns failure');
+    assert(
+      rejectRes.error?.includes('550') || rejectRes.error?.includes('SMTP delivery failed') || false,
+      'Error captured on 550 rejection'
+    );
+    assert(!rejectRes.error?.includes(testPass), 'Password is not leaked in rejection error');
+    await new Promise<void>((resolve) => rejectSink.close(() => resolve()));
+
+    // 3. Drop connection mid-send
+    const dropSink = new SMTPServer({
+      secure: false,
+      disabledCommands: ['STARTTLS'],
+      authOptional: true,
+      onData(stream, session, callback) {
+        (session as any).connection?.close();
+      },
+    });
+    await new Promise<void>((resolve) => dropSink.listen(0, '127.0.0.1', () => resolve()));
+    const dropPort = (dropSink.server.address() as any).port;
+    process.env.SMTP_PORT = String(dropPort);
+
+    const dropRes = await sendEmailAlert(emailRecipient, injectionMsg);
+    assert(!dropRes.success, 'Connection drop mid-send returns failure');
+    assert(dropRes.error?.includes('SMTP delivery failed') || false, 'Connection drop returns scrubbed error, does not crash');
+    await new Promise<void>((resolve) => dropSink.close(() => resolve()));
+
+    // 4. DRY_RUN mode sends nothing to sink
+    const drySink = new SMTPServer({
+      secure: false,
+      disabledCommands: ['STARTTLS'],
+      authOptional: true,
+      onData(stream, session, callback) {
+        callback(null);
+      },
+    });
+    await new Promise<void>((resolve) => drySink.listen(0, '127.0.0.1', () => resolve()));
+    const dryPort = (drySink.server.address() as any).port;
+    process.env.SMTP_PORT = String(dryPort);
+
+    const emailBeforeDryCount = receivedEmails.length;
+    const dispatcherDry = new AlertDispatcher(store);
+    dispatcherDry.setMode('dry_run');
+    await store.createRecipient({
+      name: 'Dry Recipient',
+      channel: 'email',
+      destination: 'dry@cpcb.test.local',
+      scope_type: 'all',
+      min_tier: 'ELEVATED',
+      active: true,
+    });
+    await dispatcherDry.handleInferenceResult(makeMockPayload({}, 0.85));
+    await dispatcherDry.dispatchCycle();
+    assert(receivedEmails.length === emailBeforeDryCount, 'Zero emails transmitted to sink in DRY_RUN mode');
+    await new Promise<void>((resolve) => drySink.close(() => resolve()));
+  }
+
+  console.log('\nTEST 21: Ingestion Isolation when Dispatch Hook Throws (Item 6)');
+  {
+    const { getGlobalAlertDispatcher } = await import('../src/server/services/alertDispatcher');
+    const dispatcher = getGlobalAlertDispatcher();
+
+    // Simulate dispatcher throwing a sensitive DB error
+    const originalHandler = dispatcher.handleInferenceResult.bind(dispatcher);
+    dispatcher.handleInferenceResult = async () => {
+      throw new Error('DATABASE FATAL: postgresql://admin:super_secret_db_pass@127.0.0.1:5432/vayu failed');
+    };
+
+    // Instantiate Ingestion Scheduler
+    const { WaqiIngestionScheduler } = await import('../src/server/ingestionScheduler');
+    const scheduler = new WaqiIngestionScheduler();
+    const historyStore = (scheduler as any).store;
+
+    // Spy on console.error to verify scrubbing
+    let loggedError = '';
+    const origConsoleError = console.error;
+    console.error = (...args: any[]) => {
+      loggedError += args.join(' ');
+    };
+
+    try {
+      // Mock WAQI API fetch for station DL001
+      const origFetch = global.fetch;
+      global.fetch = async () => {
+        return {
+          ok: true,
+          json: async () => ({
+            status: 'ok',
+            data: {
+              idx: 9999,
+              aqi: 220,
+              iaqi: { pm25: { v: 220 } },
+              city: { name: 'Delhi Anand Vihar Ingestion Test', geo: [28.65, 77.23] },
+              time: { iso: new Date().toISOString() },
+            },
+          }),
+        } as any;
+      };
+
+      const result = await scheduler.fetchAndIngestStation('DL001');
+
+      assert(result.success === true, 'Station ingestion succeeds even when dispatch hook throws');
+      assert(!!result.observation, 'Observation was parsed and retained');
+      assert(result.observation?.pm25 === 220, 'Observed PM2.5 recorded accurately');
+
+      // Verify persistent history store was updated
+      const history = await historyStore.getStationObservations('DL001', 10);
+      assert(history.length > 0, 'History store was updated with observation despite dispatch hook failure');
+
+      // Verify error was scrubbed
+      assert(loggedError.includes('[IngestionScheduler] Alert dispatch hook error:'), 'Hook failure logged as an error');
+      assert(!loggedError.includes('super_secret_db_pass'), 'DB password is scrubbed from logged error');
+
+      global.fetch = origFetch;
+    } finally {
+      console.error = origConsoleError;
+      dispatcher.handleInferenceResult = originalHandler;
+    }
+  }
+
+  console.log('\nTEST 22: Startup Safety Checks & Failed Admin-Token Rate Limiting (Item 7)');
+  {
+    // Part A: validateAlertSafetyConfig
+    let threwFatal = false;
+    try {
+      validateAlertSafetyConfig({
+        nodeEnv: 'production',
+        deliveryMode: 'live',
+        allowPrivateWebhooks: true,
+        hasAdminToken: true,
+        hasSigningSecret: true,
+      });
+    } catch (err: any) {
+      threwFatal = true;
+      assert(
+        err.message.includes('FATAL') && err.message.includes('ALERT_ALLOW_PRIVATE_WEBHOOKS'),
+        'Throws fatal error in production with private webhooks allowed'
+      );
+    }
+    assert(threwFatal, 'Fatal safety check threw as expected');
+
+    const checkNoAdmin = validateAlertSafetyConfig({
+      nodeEnv: 'production',
+      deliveryMode: 'live',
+      allowPrivateWebhooks: false,
+      hasAdminToken: false,
+      hasSigningSecret: true,
+    });
+    assert(checkNoAdmin.canStart === false, 'Refuses to start dispatcher in live production without admin token');
+
+    const checkNoSecret = validateAlertSafetyConfig({
+      nodeEnv: 'production',
+      deliveryMode: 'live',
+      allowPrivateWebhooks: false,
+      hasAdminToken: true,
+      hasSigningSecret: false,
+    });
+    assert(checkNoSecret.canStart === false, 'Refuses to start dispatcher in live production without webhook signing secret');
+
+    // Part B: Failed Admin-Token Rate Limiting
+    resetAuthRateLimiterForTesting();
+    const server = http.createServer((req, res) => handleAlertDeliveryRequest(req, res));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const port = (server.address() as any).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    // 10 failed attempts
+    for (let i = 0; i < 10; i++) {
+      const res = await fetch(`${baseUrl}/api/alerts/delivery/admin/recipients`, {
+        headers: { Authorization: 'Bearer bad_token_attempt' },
+      });
+      assert(res.status === 401, `Failed attempt ${i + 1} returns 401`);
+    }
+
+    // 11th attempt must return 429 Too Many Requests with Retry-After
+    const resThrottled = await fetch(`${baseUrl}/api/alerts/delivery/admin/recipients`, {
+      headers: { Authorization: 'Bearer bad_token_attempt' },
+    });
+    assert(resThrottled.status === 429, '11th failed attempt returns 429 Too Many Requests');
+    assert(resThrottled.headers.get('retry-after') === '600', '429 response includes Retry-After: 600 header');
+
+    // Successful authentication is NOT penalized
+    const resValid = await fetch(`${baseUrl}/api/alerts/delivery/admin/recipients`, {
+      headers: { Authorization: `Bearer ${process.env.ALERT_ADMIN_TOKEN}` },
+    });
+    assert(resValid.status === 200, 'Valid admin token succeeds immediately despite failed attempt count on client');
+
+    server.close();
   }
 
   console.log('\n----------------------------------------------------------------');

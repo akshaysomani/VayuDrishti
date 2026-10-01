@@ -24,11 +24,12 @@ export interface RecipientRecord {
   scope_value?: string | null;
   min_tier?: AlertMinTier | null;
   active: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export type RecipientCreateInput = Omit<RecipientRecord, 'id' | 'created_at' | 'updated_at'>;
+export type RecipientCreateInput = Omit<RecipientRecord, 'id' | 'created_at' | 'updated_at' | 'deleted_at'>;
 
 export type OutboxStatus = 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'DEAD' | 'DRY_RUN';
 
@@ -67,6 +68,7 @@ export interface AlertOutboxRecord {
   attempts: number;
   max_attempts: number;
   next_attempt_at: string;
+  lease_expires_at?: string | null;
   last_error: string | null;
   created_at: string;
   updated_at: string;
@@ -74,7 +76,7 @@ export interface AlertOutboxRecord {
 
 export type OutboxCreateInput = Omit<
   AlertOutboxRecord,
-  'id' | 'attempts' | 'created_at' | 'updated_at' | 'last_error'
+  'id' | 'attempts' | 'created_at' | 'updated_at' | 'last_error' | 'lease_expires_at'
 >;
 
 export interface AlertDeliveryRecord {
@@ -101,6 +103,14 @@ export interface StationCooldownState {
   active_tier: RiskTier;
 }
 
+export interface PublicRecentDelivery {
+  channel: AlertChannel;
+  status: 'SENT' | 'FAILED' | 'DRY_RUN';
+  station: string;
+  tier: RiskTier;
+  timestamp: string;
+}
+
 export interface AlertDeliveryStats {
   mode: AlertDeliveryMode;
   is_dispatcher_running: boolean;
@@ -108,6 +118,11 @@ export interface AlertDeliveryStats {
   counts_by_status: Record<OutboxStatus, number>;
   total_recipients: number;
   active_recipients: number;
-  recent_deliveries: AlertDeliveryRecord[];
+  recent_deliveries: PublicRecentDelivery[];
   cooldowns: Record<string, StationCooldownState>;
 }
+
+export interface AdminAlertDeliveryStats extends Omit<AlertDeliveryStats, 'recent_deliveries'> {
+  recent_deliveries: AlertDeliveryRecord[];
+}
+

@@ -19,7 +19,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, createHash } from 'node:crypto';
 import { getAlertDeliveryStore } from './storage/alertDeliveryStore';
 import { getGlobalAlertDispatcher } from './services/alertDispatcher';
 import { sendWebhookAlert } from './channels/webhookChannel';
@@ -27,7 +27,6 @@ import { sendEmailAlert } from './channels/emailChannel';
 import type {
   RecipientCreateInput,
   StructuredAlertMessage,
-  AlertDeliveryRecord,
 } from '../types/alertDelivery';
 
 function sendJson(res: ServerResponse, statusCode: number, data: unknown): void {
@@ -40,6 +39,37 @@ function sendJson(res: ServerResponse, statusCode: number, data: unknown): void 
 
 function sendError(res: ServerResponse, statusCode: number, message: string): void {
   sendJson(res, statusCode, { error: message });
+}
+
+// -----------------------------------------------------------------------------
+// Admin Token Authentication & Failure Rate Limiting (Phase 5 f4 Hardening)
+// -----------------------------------------------------------------------------
+
+interface AuthFailureState {
+  count: number;
+  resetAt: number;
+}
+
+const authFailureMap = new Map<string, AuthFailureState>();
+const AUTH_FAILURE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const AUTH_FAILURE_MAX = 10;
+
+export function resetAuthRateLimiterForTesting(): void {
+  authFailureMap.clear();
+}
+
+function getHashedClientKey(req: IncomingMessage): string {
+  const trustProxy = process.env.TRUST_PROXY === 'true';
+  let ip = '';
+  if (trustProxy && req.headers['x-forwarded-for']) {
+    const raw = req.headers['x-forwarded-for'];
+    const forwarded = Array.isArray(raw) ? raw[0] : raw;
+    ip = forwarded.split(',')[0].trim();
+  }
+  if (!ip) {
+    ip = req.socket?.remoteAddress || '127.0.0.1';
+  }
+  return createHash('sha256').update(ip).digest('hex');
 }
 
 export function verifyAdminToken(providedToken?: string | null): boolean {
@@ -70,7 +100,7 @@ export function isAdminConfigured(): boolean {
   return Boolean(secret && secret.trim().length > 0);
 }
 
-function maskDestination(destination: string, channel: string): string {
+export function maskDestination(destination: string, channel: string): string {
   if (channel === 'email') {
     const parts = destination.split('@');
     if (parts.length === 2) {
@@ -103,25 +133,17 @@ export async function handleAlertDeliveryRequest(
 
   try {
     // -------------------------------------------------------------------------
-    // 1. PUBLIC: GET /api/alerts/delivery/stats
+    // 1. PUBLIC: GET /api/alerts/delivery/stats (Strictly Minimized Output)
     // -------------------------------------------------------------------------
     if (pathname === '/api/alerts/delivery/stats' && method === 'GET') {
       const stats = await store.getDeliveryStats();
-      // Mask recipient destinations for public view
-      const sanitizedDeliveries: AlertDeliveryRecord[] = stats.recent_deliveries.map((d) => ({
-        ...d,
-        recipient_destination: maskDestination(d.recipient_destination, d.channel),
-      }));
-
-      sendJson(res, 200, {
-        ...stats,
-        recent_deliveries: sanitizedDeliveries,
-      });
+      // Public output contains zero recipient names, destinations, or URLs
+      sendJson(res, 200, stats);
       return;
     }
 
     // -------------------------------------------------------------------------
-    // 2. ADMIN AUTH GUARD (All /admin/* routes)
+    // 2. ADMIN AUTH GUARD (All /admin/* routes with Failure Rate Limiting)
     // -------------------------------------------------------------------------
     if (pathname.startsWith('/api/alerts/delivery/admin')) {
       if (!isAdminConfigured()) {
@@ -133,13 +155,60 @@ export async function handleAlertDeliveryRequest(
         return;
       }
 
+      const clientKey = getHashedClientKey(req);
+      const now = Date.now();
+      const failState = authFailureMap.get(clientKey);
+
       const authHeader =
         req.headers.authorization ||
         (req.headers['x-alert-admin-token'] as string) ||
         (req.headers['x-moderator-token'] as string);
 
-      if (!verifyAdminToken(authHeader)) {
+      const isValidToken = verifyAdminToken(authHeader);
+
+      if (isValidToken) {
+        // Successful auth is not penalized
+        if (failState) {
+          authFailureMap.delete(clientKey);
+        }
+      } else {
+        // Check failure rate limit: 10 failures per 10 minutes
+        if (failState && now < failState.resetAt && failState.count >= AUTH_FAILURE_MAX) {
+          const retryAfterSeconds = Math.max(1, Math.ceil((failState.resetAt - now) / 1000));
+          res.setHeader('Retry-After', String(retryAfterSeconds));
+          sendError(
+            res,
+            429,
+            `Too Many Requests: Too many failed admin authentication attempts. Retry after ${retryAfterSeconds} seconds.`
+          );
+          return;
+        }
+
+        // Record failure
+        const currentCount = failState && now < failState.resetAt ? failState.count + 1 : 1;
+        const resetAt =
+          failState && now < failState.resetAt ? failState.resetAt : now + AUTH_FAILURE_WINDOW_MS;
+        authFailureMap.set(clientKey, { count: currentCount, resetAt });
+
         sendError(res, 401, 'Unauthorized: Valid admin credentials required.');
+        return;
+      }
+
+      // -----------------------------------------------------------------------
+      // 2.0 GET /api/alerts/delivery/admin/stats (Full Admin Stats with masked deliveries)
+      // -----------------------------------------------------------------------
+      if (pathname === '/api/alerts/delivery/admin/stats' && method === 'GET') {
+        const adminStats = await store.getAdminDeliveryStats();
+        sendJson(res, 200, adminStats);
+        return;
+      }
+
+      // -----------------------------------------------------------------------
+      // 2.0b GET /api/alerts/delivery/admin/deliveries (Full Delivery Audit Log)
+      // -----------------------------------------------------------------------
+      if (pathname === '/api/alerts/delivery/admin/deliveries' && method === 'GET') {
+        const deliveries = await store.listRecentDeliveries(50);
+        sendJson(res, 200, { deliveries });
         return;
       }
 
@@ -199,7 +268,18 @@ export async function handleAlertDeliveryRequest(
           active: active !== undefined ? Boolean(active) : true,
         };
 
-        const created = await store.createRecipient(input);
+        let created: any;
+        try {
+          created = await store.createRecipient(input);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('unique') || msg.includes('uq_recipients')) {
+            sendError(res, 409, 'An active recipient with this channel and destination already exists.');
+            return;
+          }
+          throw err;
+        }
+
         sendJson(res, 201, { success: true, recipient: created });
         return;
       }
@@ -220,6 +300,20 @@ export async function handleAlertDeliveryRequest(
           return;
         }
 
+        const existing = await store.getRecipientById(id);
+        if (!existing) {
+          sendError(res, 404, 'Recipient not found.');
+          return;
+        }
+        if (existing.deleted_at) {
+          sendError(
+            res,
+            409,
+            'Cannot update or re-activate soft-deleted recipient. Please register as a new recipient.'
+          );
+          return;
+        }
+
         const updated = await store.updateRecipient(id, updates);
         if (!updated) {
           sendError(res, 404, 'Recipient not found.');
@@ -236,10 +330,10 @@ export async function handleAlertDeliveryRequest(
         const id = pathname.replace('/api/alerts/delivery/admin/recipients/', '').trim();
         const deleted = await store.deleteRecipient(id);
         if (!deleted) {
-          sendError(res, 404, 'Recipient not found.');
+          sendError(res, 404, 'Recipient not found or already deleted.');
           return;
         }
-        sendJson(res, 200, { success: true, message: `Recipient ${id} deleted.` });
+        sendJson(res, 200, { success: true, message: `Recipient ${id} soft-deleted.` });
         return;
       }
 
@@ -281,7 +375,7 @@ export async function handleAlertDeliveryRequest(
           recipient = activeRecs[0] ?? null;
         }
 
-        if (!recipient) {
+        if (!recipient || recipient.deleted_at || !recipient.active) {
           sendError(res, 404, 'No active recipient found to receive test alert.');
           return;
         }

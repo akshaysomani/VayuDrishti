@@ -178,3 +178,105 @@ The policy engine acts as the gatekeeper between raw model evaluations and the o
    - **Runtime Scripted Rotation:** All secret rotations must be executed using ephemeral in-memory scripts that read `.env` dynamically, generate cryptographic entropy via `crypto.randomBytes(32).toString('hex')`, rewrite `.env` in-place, and leave no secret traces or disk backup files behind.
    - **Runtime In-Memory Audits:** Leak sweeps and pattern checks must consume secret references in-memory rather than injecting literal string arguments into command lines (e.g., avoiding `Select-String -Pattern '<literal>'`).
 
+---
+
+## 6. Hardening Architecture & Enterprise Resilience
+
+### 6.1 Stuck-Sending Lease & Recovery Semantics
+- **Problem:** If a dispatcher instance crashes, loses network connectivity, or terminates mid-flight while processing an outbox row, the record would remain orphaned in `SENDING` status indefinitely.
+- **Solution (Migration 004):**
+  - Added `lease_expires_at TIMESTAMPTZ` column and partial index `idx_outbox_sending_lease` on `alert_outbox(lease_expires_at) WHERE status = 'SENDING'`.
+  - When claiming a pending batch via `claimPendingOutbox()`, each claimed row has its lease set to `NOW() + INTERVAL 'ALERT_SEND_LEASE_SECONDS'` (default: 120s).
+  - At the beginning of every dispatch cycle, `reclaimStuckLeases()` executes an atomic, race-safe query across the cluster:
+    ```sql
+    UPDATE alert_outbox
+    SET status = CASE WHEN attempts >= max_attempts THEN 'DEAD' ELSE 'PENDING' END,
+        attempts = CASE WHEN attempts >= max_attempts THEN attempts ELSE attempts + 1 END,
+        next_attempt_at = CASE WHEN attempts >= max_attempts THEN next_attempt_at ELSE NOW() + (POWER(2, attempts) * INTERVAL '1 second') END,
+        last_error = 'Delivery lease expired while in SENDING status; reclaimed for retry',
+        lease_expires_at = NULL,
+        updated_at = NOW()
+    WHERE status = 'SENDING' AND lease_expires_at < NOW()
+    RETURNING id, status, attempts;
+    ```
+  - **Delivery Semantics:** Outbox delivery guarantees **at-least-once** delivery across worker restarts or transient crashes.
+
+### 6.2 Idempotency Keys & Receiver Guidance
+- **Deterministic Key Derivation:**
+  - `generateDeliveryIdempotencyKey(dedupeKey, recipientId)` produces a deterministic SHA-256 hex digest computed over `${dedupeKey}:${recipientId}`.
+  - It contains zero secret data and remains identical across all retries, reclaims, and server restarts.
+- **Webhook Channel:**
+  - Sends `Idempotency-Key: <key>` header on every HTTP POST request.
+  - Injects `delivery_id` and `idempotency_key` into the signed JSON body.
+  - Both header and body fields are covered by the cryptographic signature in `X-VayuDrishti-Signature: sha256=<hmac>`.
+- **Email Channel:**
+  - Generates deterministic RFC 5322 header: `Message-ID: <idempotency_key@alerts.vayudrishti.org>`.
+- **Guidance for Downstream Receivers & Authorities:**
+  - Because delivery operates on at-least-once semantics, receiver endpoints should record incoming `Idempotency-Key` or `Message-ID` values.
+  - If a message with an already-processed key is received within 24 hours, the receiver should return `200 OK` and ignore duplicate processing or dispatch.
+
+### 6.3 Soft-Delete Recipient Lifecycle
+- **Problem:** Hard-deleting authority contacts breaks foreign keys or historical audits in `alert_deliveries`.
+- **Solution (Migration 004):**
+  - Added `deleted_at TIMESTAMPTZ NULL` column to `recipients`.
+  - Replaced global unique constraint on `(channel, destination)` with a partial unique index:
+    ```sql
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_recipients_channel_dest_undeleted
+    ON recipients(channel, destination) WHERE deleted_at IS NULL;
+    ```
+  - Admin `DELETE /api/alerts/delivery/admin/recipients/:id` executes soft deletion:
+    ```sql
+    UPDATE recipients SET deleted_at = NOW(), active = false, updated_at = NOW() WHERE id = $1;
+    ```
+  - Soft-deleted recipients are automatically excluded from `listRecipients()`, fan-out dispatch, and test alerts.
+  - Admin `PATCH` on a soft-deleted recipient returns `409 Conflict` (cannot reactivate a soft-deleted recipient).
+  - Because the unique constraint is partial (`WHERE deleted_at IS NULL`), authorities can safely re-register the same email address or webhook URL after past decommissioning.
+
+### 6.4 Public Stats Minimization & Privacy
+- **Public Surface (`GET /api/alerts/delivery/stats`):**
+  - Strictly limited to high-level operational telemetry:
+    ```typescript
+    interface PublicRecentDelivery {
+      channel: AlertChannelType;
+      status: AlertDeliveryStatus;
+      station: string;
+      tier: AlertTier;
+      timestamp: string;
+    }
+    ```
+  - **Zero Exposure:** Never leaks recipient email addresses, webhook URLs, domain names, query strings, or authority contact names to unauthenticated callers.
+- **Admin Surface (`GET /api/alerts/delivery/admin/stats` and `/admin/deliveries`):**
+  - Retains full delivery audit records, recipient names, and destination logs for authorized security operators.
+- **Dashboard UI (`AlertDeliveryPanel.tsx`):**
+  - Unauthenticated view renders clean public delivery rows without recipient metadata.
+  - Authenticated view with valid `ALERT_ADMIN_TOKEN` unlocks full destination telemetry with masked domains and management tools.
+
+### 6.5 Ingestion Isolation (Post-Inference Hook)
+- The delivery queue hook in `ingestionScheduler.ts` is invoked after WAQI observation ingestion and model inference.
+- **Fault Isolation:**
+  - Wrapped in a bounded `Promise.race` with a 1500ms timeout and an independent `try/catch` block.
+  - Database outages, connection pool exhaustion, or outbox exceptions can **never** abort or block the ingestion loop.
+  - Station telemetry and feature histories remain 100% intact even during catastrophic alert delivery infrastructure failures.
+  - Errors are scrubbed for credentials before logging.
+
+### 6.6 Startup Safety Guards & Admin Auth Throttling
+- **Production Boot Safety Guards:**
+  - If `NODE_ENV === 'production'` and `ALERT_ALLOW_PRIVATE_WEBHOOKS === 'true'`, the application terminates immediately with a fatal configuration error.
+  - If `NODE_ENV === 'production'` and `ALERT_DELIVERY_MODE === 'live'`, the dispatcher checks for `ALERT_ADMIN_TOKEN` and `ALERT_WEBHOOK_SIGNING_SECRET`. If either is missing, it refuses to start the dispatcher and logs a fatal error, preventing unauthenticated live transmission.
+- **Admin Auth Brute-Force Throttling:**
+  - Failed admin authentication attempts are tracked per client key (hashed client IP respecting `TRUST_PROXY`).
+  - Upon exceeding `ADMIN_AUTH_FAIL_LIMIT` (default: 10 failures in 600s), subsequent requests are rejected with `429 Too Many Requests` and `Retry-After: 600`.
+  - Successful authentication is never penalized and immediately resets the client's failure counter.
+  - *Multi-Instance Note:* In-memory tracking is local to the Node process; multi-container clusters behind a load balancer should utilize sticky sessions or centralized Redis rate limiting.
+
+### 6.7 Real SMTP Sink Integration Testing
+- The test harness (`scripts/test_alert_delivery.ts`) embeds a real RFC 5321 SMTP server (`smtp-server`) running on an ephemeral loopback port (`127.0.0.1`).
+- Dynamically verifies:
+  1. Plain-text and HTML MIME generation.
+  2. Mandatory disclaimer inclusion: *"Model-based early-warning estimate, not a confirmed measurement."*
+  3. Dynamic HTML escaping against injection payloads in station and city fields.
+  4. Deterministic `Message-ID` header matching the idempotency specification.
+  5. SMTP 550 mailbox rejection handling with backoff scheduling.
+  6. Socket disconnect / unexpected termination handling without uncaught exceptions or crashes.
+  7. Zero transmission during `dry_run` mode.
+

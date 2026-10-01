@@ -17,6 +17,7 @@ import alertDataRaw from '../data/alert_data.json';
 import type { LiveAlertPayload, LiveExposureContext } from '../types/liveAlert';
 import { getGlobalAlertDispatcher } from './services/alertDispatcher';
 import { getGlobalTriageWorker } from './services/triageWorker';
+import { scrubSensitiveErrorInfo } from './storage/alertDeliveryStore';
 
 const alertData = alertDataRaw as {
   stations: Record<
@@ -273,12 +274,19 @@ export class WaqiIngestionScheduler {
       this.status.consecutive_errors = 0;
       this.status.last_error = null;
 
-      // Phase 5 f4: Authoritative Alert Delivery Post-Inference Hook
+      // Phase 5 f4: Authoritative Alert Delivery Post-Inference Hook (bounded fire-and-forget)
       try {
         const dispatcher = getGlobalAlertDispatcher();
-        await dispatcher.handleInferenceResult(payload);
-      } catch (dispatchErr) {
-        console.error('[IngestionScheduler] Alert dispatch hook error:', dispatchErr);
+        await Promise.race([
+          dispatcher.handleInferenceResult(payload),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Dispatch hook execution timed out')), 1500)
+          ),
+        ]);
+      } catch (dispatchErr: unknown) {
+        const rawMsg = dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr);
+        const cleanMsg = scrubSensitiveErrorInfo(rawMsg);
+        console.error('[IngestionScheduler] Alert dispatch hook error:', cleanMsg);
       }
 
       return {

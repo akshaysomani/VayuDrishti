@@ -23,6 +23,8 @@ import type {
   AlertDeliveryRecord,
   AlertDeliveryCreateInput,
   AlertDeliveryStats,
+  AdminAlertDeliveryStats,
+  PublicRecentDelivery,
   StationCooldownState,
   AlertDeliveryMode,
 } from '../../types/alertDelivery';
@@ -38,7 +40,8 @@ export interface IAlertDeliveryStore {
   queueOutboxAlert(input: OutboxCreateInput): Promise<{ queued: boolean; outboxId?: string; reason?: string }>;
   getOutboxItemById(id: string): Promise<AlertOutboxRecord | null>;
   listOutbox(status?: OutboxStatus, limit?: number, offset?: number): Promise<{ items: AlertOutboxRecord[]; total: number }>;
-  claimPendingOutboxItems(limit?: number): Promise<AlertOutboxRecord[]>;
+  claimPendingOutboxItems(limit?: number, leaseSeconds?: number): Promise<AlertOutboxRecord[]>;
+  reclaimStuckLeases(): Promise<{ reclaimed: number; deadLettered: number }>;
   updateOutboxStatus(
     id: string,
     status: OutboxStatus,
@@ -49,8 +52,10 @@ export interface IAlertDeliveryStore {
 
   recordDelivery(input: AlertDeliveryCreateInput): Promise<AlertDeliveryRecord>;
   listRecentDeliveries(limit?: number): Promise<AlertDeliveryRecord[]>;
+  listRecentPublicDeliveries(limit?: number): Promise<PublicRecentDelivery[]>;
   getStationLastAlert(stationId: string): Promise<{ tier: RiskTier; createdAt: Date } | null>;
   getDeliveryStats(): Promise<AlertDeliveryStats>;
+  getAdminDeliveryStats(): Promise<AdminAlertDeliveryStats>;
   retryFailedItem(id: string): Promise<boolean>;
   clear(): Promise<void>;
 }
@@ -99,8 +104,8 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
 
   public async listRecipients(activeOnly: boolean = false): Promise<RecipientRecord[]> {
     const query = activeOnly
-      ? 'SELECT * FROM recipients WHERE active = true ORDER BY created_at ASC;'
-      : 'SELECT * FROM recipients ORDER BY created_at ASC;';
+      ? 'SELECT * FROM recipients WHERE deleted_at IS NULL AND active = true ORDER BY created_at ASC;'
+      : 'SELECT * FROM recipients WHERE deleted_at IS NULL ORDER BY created_at ASC;';
     const res = await this.pool.query(query);
     return res.rows.map(this.mapRecipient);
   }
@@ -115,7 +120,7 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
     updates: Partial<RecipientCreateInput>
   ): Promise<RecipientRecord | null> {
     const current = await this.getRecipientById(id);
-    if (!current) return null;
+    if (!current || current.deleted_at) return null;
 
     const res = await this.pool.query(
       `UPDATE recipients SET
@@ -128,7 +133,7 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
         min_tier = COALESCE($8, min_tier),
         active = COALESCE($9, active),
         updated_at = NOW()
-      WHERE id = $1
+      WHERE id = $1 AND deleted_at IS NULL
       RETURNING *;`,
       [
         id,
@@ -146,7 +151,11 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
   }
 
   public async deleteRecipient(id: string): Promise<boolean> {
-    const res = await this.pool.query('DELETE FROM recipients WHERE id = $1;', [id]);
+    // Soft-delete recipient: set deleted_at and active=false, preserving audit history
+    const res = await this.pool.query(
+      'UPDATE recipients SET deleted_at = NOW(), active = false, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL;',
+      [id]
+    );
     return (res.rowCount ?? 0) > 0;
   }
 
@@ -236,7 +245,17 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
    * Claims up to `limit` rows in PENDING or FAILED (with next_attempt_at <= NOW())
    * and transitions their status to 'SENDING'.
    */
-  public async claimPendingOutboxItems(limit: number = 10): Promise<AlertOutboxRecord[]> {
+  /**
+   * Concurrency-safe claim using SELECT ... FOR UPDATE SKIP LOCKED
+   * Claims up to `limit` rows in PENDING or FAILED (with next_attempt_at <= NOW())
+   * and transitions their status to 'SENDING' with a bounded lease_expires_at.
+   */
+  public async claimPendingOutboxItems(
+    limit: number = 10,
+    leaseSeconds?: number
+  ): Promise<AlertOutboxRecord[]> {
+    const leaseSec =
+      leaseSeconds ?? parseInt(process.env.ALERT_SEND_LEASE_SECONDS || '120', 10);
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN;');
@@ -260,14 +279,66 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
       const ids = selectRes.rows.map((r) => r.id);
       const updateRes = await client.query(
         `UPDATE alert_outbox
-         SET status = 'SENDING', updated_at = NOW()
+         SET status = 'SENDING',
+             lease_expires_at = NOW() + ($2 || ' seconds')::INTERVAL,
+             updated_at = NOW()
          WHERE id = ANY($1::uuid[])
          RETURNING *;`,
-        [ids]
+        [ids, leaseSec]
       );
 
       await client.query('COMMIT;');
       return updateRes.rows.map(this.mapOutbox);
+    } catch (err) {
+      await client.query('ROLLBACK;');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Recovers stuck SENDING rows whose lease has expired.
+   * Race-safe atomic execution returning rows to PENDING (with backoff) or DEAD (if max attempts exceeded).
+   */
+  public async reclaimStuckLeases(): Promise<{ reclaimed: number; deadLettered: number }> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN;');
+
+      // 1. Mark dead rows where attempts >= max_attempts
+      const deadRes = await client.query(
+        `UPDATE alert_outbox
+         SET status = 'DEAD',
+             lease_expires_at = NULL,
+             last_error = 'Lease expired while in SENDING status (stuck worker/timeout). Max attempts reached.',
+             updated_at = NOW()
+         WHERE status = 'SENDING'
+           AND lease_expires_at < NOW()
+           AND attempts >= max_attempts
+         RETURNING id;`
+      );
+
+      // 2. Reclaim rows with attempts < max_attempts back to PENDING with attempts incremented and backoff
+      const retryRes = await client.query(
+        `UPDATE alert_outbox
+         SET status = 'PENDING',
+             attempts = attempts + 1,
+             lease_expires_at = NULL,
+             next_attempt_at = NOW() + (LEAST(3600, POWER(2, attempts + 1)) || ' seconds')::INTERVAL,
+             last_error = 'Lease expired while in SENDING status (stuck worker/timeout). Reclaimed for retry.',
+             updated_at = NOW()
+         WHERE status = 'SENDING'
+           AND lease_expires_at < NOW()
+           AND attempts < max_attempts
+         RETURNING id;`
+      );
+
+      await client.query('COMMIT;');
+      return {
+        reclaimed: retryRes.rowCount ?? 0,
+        deadLettered: deadRes.rowCount ?? 0,
+      };
     } catch (err) {
       await client.query('ROLLBACK;');
       throw err;
@@ -290,6 +361,7 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
            attempts = $3,
            next_attempt_at = $4,
            last_error = $5,
+           lease_expires_at = NULL,
            updated_at = NOW()
        WHERE id = $1;`,
       [id, status, attempts, nextAttemptAt.toISOString(), cleanError]
@@ -329,6 +401,29 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
       [limit]
     );
     return res.rows.map(this.mapDelivery);
+  }
+
+  public async listRecentPublicDeliveries(limit: number = 10): Promise<PublicRecentDelivery[]> {
+    const res = await this.pool.query(
+      `SELECT
+         d.channel,
+         d.status,
+         COALESCE(o.station_name, o.station_id, 'Unknown') AS station,
+         COALESCE(o.tier, 'Elevated') AS tier,
+         d.delivered_at AS timestamp
+       FROM alert_deliveries d
+       LEFT JOIN alert_outbox o ON d.outbox_id = o.id
+       ORDER BY d.delivered_at DESC
+       LIMIT $1;`,
+      [limit]
+    );
+    return res.rows.map((r) => ({
+      channel: r.channel,
+      status: r.status,
+      station: r.station,
+      tier: r.tier as RiskTier,
+      timestamp: new Date(r.timestamp).toISOString(),
+    }));
   }
 
   // ---------------------------------------------------------------------------
@@ -372,18 +467,18 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
       }
     }
 
-    // 2. Recipient counts
+    // 2. Recipient counts (excluding soft-deleted)
     const recCountRes = await this.pool.query(
       `SELECT
-        COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE active = true) AS active
+        COUNT(*) FILTER (WHERE deleted_at IS NULL) AS total,
+        COUNT(*) FILTER (WHERE deleted_at IS NULL AND active = true) AS active
        FROM recipients;`
     );
     const totalRecipients = parseInt(recCountRes.rows[0]?.total ?? '0', 10);
     const activeRecipients = parseInt(recCountRes.rows[0]?.active ?? '0', 10);
 
-    // 3. Recent deliveries
-    const recentDeliveries = await this.listRecentDeliveries(10);
+    // 3. Recent deliveries (minimized public format, NO recipient destinations or names)
+    const recentDeliveries = await this.listRecentPublicDeliveries(10);
 
     // 4. Cooldown states across active stations
     const cooldownWindowHours = parseInt(process.env.ALERT_COOLDOWN_HOURS || '6', 10);
@@ -421,6 +516,15 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
       active_recipients: activeRecipients,
       recent_deliveries: recentDeliveries,
       cooldowns,
+    };
+  }
+
+  public async getAdminDeliveryStats(): Promise<AdminAlertDeliveryStats> {
+    const publicStats = await this.getDeliveryStats();
+    const adminDeliveries = await this.listRecentDeliveries(20);
+    return {
+      ...publicStats,
+      recent_deliveries: adminDeliveries,
     };
   }
 
@@ -466,6 +570,7 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
       scope_value: row.scope_value ?? null,
       min_tier: row.min_tier ?? null,
       active: row.active,
+      deleted_at: row.deleted_at ? new Date(row.deleted_at).toISOString() : null,
       created_at: new Date(row.created_at).toISOString(),
       updated_at: new Date(row.updated_at).toISOString(),
     };
@@ -490,6 +595,7 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
       attempts: row.attempts,
       max_attempts: row.max_attempts,
       next_attempt_at: new Date(row.next_attempt_at).toISOString(),
+      lease_expires_at: row.lease_expires_at ? new Date(row.lease_expires_at).toISOString() : null,
       last_error: row.last_error,
       created_at: new Date(row.created_at).toISOString(),
       updated_at: new Date(row.updated_at).toISOString(),

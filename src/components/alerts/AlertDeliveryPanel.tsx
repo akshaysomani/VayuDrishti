@@ -17,9 +17,11 @@ import {
   Mail,
   Webhook,
   Activity,
+  Trash2,
 } from 'lucide-react';
 import type {
   AlertDeliveryStats,
+  AlertDeliveryRecord,
   RecipientRecord,
   StationCooldownState,
   AlertMinTier,
@@ -31,7 +33,7 @@ gsap.registerPlugin(useGSAP);
 export const AlertDeliveryPanel: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Public stats state
+  // Public stats state (strictly minimized, 0 recipient destination text)
   const [stats, setStats] = useState<AlertDeliveryStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -44,6 +46,7 @@ export const AlertDeliveryPanel: React.FC = () => {
 
   // Admin data
   const [recipients, setRecipients] = useState<RecipientRecord[]>([]);
+  const [adminDeliveries, setAdminDeliveries] = useState<AlertDeliveryRecord[]>([]);
   const [loadingRecipients, setLoadingRecipients] = useState<boolean>(false);
   const [triggeringDispatch, setTriggeringDispatch] = useState<boolean>(false);
 
@@ -85,7 +88,7 @@ export const AlertDeliveryPanel: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Admin token verification & recipient fetching
+  // Admin token verification, recipient fetching, and detailed audit trail
   const unlockAdmin = async (tokenToVerify?: string) => {
     const activeToken = tokenToVerify ?? adminToken;
     if (!activeToken.trim()) {
@@ -96,27 +99,44 @@ export const AlertDeliveryPanel: React.FC = () => {
     setAdminError(null);
     setAdminSuccess(null);
     try {
-      const res = await fetch('/api/alerts/delivery/admin/recipients', {
+      // 1. Fetch recipients
+      const resRecipients = await fetch('/api/alerts/delivery/admin/recipients', {
         headers: {
           Authorization: `Bearer ${activeToken.trim()}`,
         },
       });
 
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 503) {
+      if (!resRecipients.ok) {
+        if (resRecipients.status === 401 || resRecipients.status === 429 || resRecipients.status === 503) {
           setIsAdminUnlocked(false);
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'Authentication failed: Invalid admin token.');
+          const errData = await resRecipients.json().catch(() => ({}));
+          throw new Error(errData.error || `Authentication failed (${resRecipients.status}).`);
         }
-        throw new Error(`Failed to fetch admin recipients (${res.status})`);
+        throw new Error(`Failed to fetch admin recipients (${resRecipients.status})`);
       }
 
-      const data = await res.json();
-      setRecipients(data.recipients || []);
+      const dataRecipients = await resRecipients.json();
+      setRecipients(dataRecipients.recipients || []);
+
+      // 2. Fetch admin detailed deliveries audit trail
+      try {
+        const resDeliveries = await fetch('/api/alerts/delivery/admin/deliveries?limit=25', {
+          headers: {
+            Authorization: `Bearer ${activeToken.trim()}`,
+          },
+        });
+        if (resDeliveries.ok) {
+          const dataDeliveries = await resDeliveries.json();
+          setAdminDeliveries(dataDeliveries.deliveries || []);
+        }
+      } catch {
+        // Non-blocking for admin unlock
+      }
+
       setIsAdminUnlocked(true);
       setAdminSuccess('Admin credentials verified. Token held in volatile memory only.');
-      if (data.recipients?.length > 0 && !testRecipientId) {
-        setTestRecipientId(data.recipients[0].id);
+      if (dataRecipients.recipients?.length > 0 && !testRecipientId) {
+        setTestRecipientId(dataRecipients.recipients[0].id);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error validating admin token.';
@@ -131,6 +151,7 @@ export const AlertDeliveryPanel: React.FC = () => {
     setAdminToken('');
     setIsAdminUnlocked(false);
     setRecipients([]);
+    setAdminDeliveries([]);
     setAdminError(null);
     setAdminSuccess(null);
   };
@@ -195,6 +216,29 @@ export const AlertDeliveryPanel: React.FC = () => {
       await unlockAdmin();
     } catch (err: unknown) {
       setAdminError(err instanceof Error ? err.message : 'Update failed');
+    }
+  };
+
+  const handleDeleteRecipient = async (id: string, name: string) => {
+    if (!adminToken) return;
+    if (!window.confirm(`Are you sure you want to soft-delete recipient "${name}"? The audit log will be preserved, but this recipient will no longer receive alerts.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/alerts/delivery/admin/recipients/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${adminToken.trim()}`,
+        },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to delete recipient (${res.status})`);
+      }
+      setAdminSuccess(`Recipient "${name}" soft-deleted successfully.`);
+      await unlockAdmin();
+    } catch (err: unknown) {
+      setAdminError(err instanceof Error ? err.message : 'Delete failed');
     }
   };
 
@@ -463,11 +507,11 @@ export const AlertDeliveryPanel: React.FC = () => {
         )}
       </div>
 
-      {/* 4. Recent Deliveries Audit Trail (Privacy-Preserving Masked) */}
+      {/* 4. Recent Deliveries Audit Trail (Public View: Minimized, Zero Destination Text) */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-secondary flex items-center gap-1.5">
           <Activity className="w-3.5 h-3.5" />
-          <span>Recent Dispatch Audit Log (Recipient Details Masked)</span>
+          <span>Recent Dispatch Audit Log</span>
         </h3>
 
         {stats?.recent_deliveries && stats.recent_deliveries.length > 0 ? (
@@ -477,16 +521,16 @@ export const AlertDeliveryPanel: React.FC = () => {
                 <tr>
                   <th className="px-3 py-2">Timestamp</th>
                   <th className="px-3 py-2">Channel</th>
-                  <th className="px-3 py-2">Destination</th>
+                  <th className="px-3 py-2">Station</th>
+                  <th className="px-3 py-2">Tier</th>
                   <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Code / Detail</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-border font-mono text-[11px]">
-                {stats.recent_deliveries.map((del) => (
-                  <tr key={del.id} className="hover:bg-surface-subtle/50 transition-colors">
+                {stats.recent_deliveries.map((del, idx) => (
+                  <tr key={`${del.timestamp}-${del.channel}-${del.station}-${idx}`} className="hover:bg-surface-subtle/50 transition-colors">
                     <td className="px-3 py-2 text-fg-secondary whitespace-nowrap">
-                      {new Date(del.delivered_at).toLocaleTimeString()}
+                      {new Date(del.timestamp).toLocaleTimeString()}
                     </td>
                     <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1">
@@ -498,8 +542,13 @@ export const AlertDeliveryPanel: React.FC = () => {
                         <span className="capitalize">{del.channel}</span>
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-fg-primary truncate max-w-[180px]">
-                      {del.recipient_destination}
+                    <td className="px-3 py-2 text-fg-primary">
+                      {del.station}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-surface-subtle border border-surface-border text-fg-secondary">
+                        {del.tier}
+                      </span>
                     </td>
                     <td className="px-3 py-2">
                       <span
@@ -513,9 +562,6 @@ export const AlertDeliveryPanel: React.FC = () => {
                       >
                         {del.status}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 text-fg-secondary">
-                      {del.provider_response_code ? `HTTP ${del.provider_response_code}` : 'Simulated (dry-run)'}
                     </td>
                   </tr>
                 ))}
@@ -681,6 +727,15 @@ export const AlertDeliveryPanel: React.FC = () => {
                           className="px-2.5 py-1 rounded bg-surface-subtle hover:bg-surface-hover border border-surface-border text-[11px] text-fg-secondary hover:text-fg-primary transition-colors cursor-pointer"
                         >
                           {r.active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRecipient(r.id, r.name)}
+                          title="Soft-delete recipient"
+                          aria-label={`Soft-delete recipient ${r.name}`}
+                          className="p-1 rounded bg-surface-subtle hover:bg-rose-500/10 border border-surface-border hover:border-rose-500/30 text-fg-secondary hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -853,6 +908,83 @@ export const AlertDeliveryPanel: React.FC = () => {
                   <span>Send Test Alert</span>
                 </button>
               </div>
+            </div>
+
+            {/* Admin Detailed Delivery Audit Log (Visible Only When Unlocked) */}
+            <div className="space-y-3 pt-2 border-t border-surface-border">
+              <h4 className="text-xs font-bold text-fg-primary uppercase font-mono tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-brand-500" />
+                <span>Admin Detailed Delivery Audit Log ({adminDeliveries.length})</span>
+              </h4>
+              <p className="text-xs text-fg-secondary">
+                Protected audit log showing recipient identity and masked delivery addresses.
+              </p>
+
+              {adminDeliveries.length > 0 ? (
+                <div className="overflow-x-auto rounded-lg border border-surface-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-surface-subtle text-fg-secondary uppercase text-[10px] font-mono border-b border-surface-border">
+                      <tr>
+                        <th className="px-3 py-2">Timestamp</th>
+                        <th className="px-3 py-2">Recipient</th>
+                        <th className="px-3 py-2">Channel</th>
+                        <th className="px-3 py-2">Destination</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Provider Response</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-surface-border font-mono text-[11px]">
+                      {adminDeliveries.map((del) => (
+                        <tr key={del.id} className="hover:bg-surface-subtle/50 transition-colors">
+                          <td className="px-3 py-2 text-fg-secondary whitespace-nowrap">
+                            {new Date(del.delivered_at).toLocaleTimeString()}
+                          </td>
+                          <td className="px-3 py-2 text-fg-primary font-medium">
+                            {recipients.find((r) => r.id === del.recipient_id)?.name || del.recipient_id || 'System'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="inline-flex items-center gap-1">
+                              {del.channel === 'webhook' ? (
+                                <Webhook className="w-3 h-3 text-brand-500" />
+                              ) : (
+                                <Mail className="w-3 h-3 text-sky-500" />
+                              )}
+                              <span className="capitalize">{del.channel}</span>
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-fg-secondary truncate max-w-[200px]">
+                            {del.recipient_destination}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                del.status === 'SENT'
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                  : del.status === 'DRY_RUN'
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                  : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                              }`}
+                            >
+                              {del.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-fg-secondary">
+                            {del.provider_response_code
+                              ? `HTTP ${del.provider_response_code}`
+                              : del.error_message
+                              ? del.error_message
+                              : 'Simulated (dry-run)'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-4 rounded-lg bg-surface-subtle border border-surface-border text-xs text-fg-secondary text-center">
+                  No detailed delivery audit records found.
+                </div>
+              )}
             </div>
           </div>
         )}

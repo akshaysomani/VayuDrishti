@@ -9,6 +9,7 @@
  * 4. Concurrency guard preventing overlapping dispatcher cycles.
  */
 
+import { createHash } from 'node:crypto';
 import type { IAlertDeliveryStore } from '../storage/alertDeliveryStore';
 import { getAlertDeliveryStore } from '../storage/alertDeliveryStore';
 import { AlertDeliveryPolicy, TIER_RANKS } from './alertDeliveryPolicy';
@@ -20,6 +21,64 @@ import type {
   AlertDeliveryMode,
 } from '../../types/alertDelivery';
 import type { LiveAlertPayload } from '../../types/liveAlert';
+
+/**
+ * Derives a stable, deterministic idempotency key from outbox dedupe_key and recipient ID.
+ * Must be identical across retries/reclaims and never leak secrets.
+ */
+export function generateDeliveryIdempotencyKey(dedupeKey: string, recipientId: string): string {
+  return createHash('sha256').update(`${dedupeKey}:${recipientId}`).digest('hex');
+}
+
+/**
+ * Startup safety validator for Alert Delivery configuration.
+ */
+export function validateAlertSafetyConfig(overrides?: {
+  nodeEnv?: string;
+  deliveryMode?: string;
+  allowPrivateWebhooks?: boolean;
+  hasAdminToken?: boolean;
+  hasSigningSecret?: boolean;
+}): { canStart: boolean; error?: string } {
+  const isProduction =
+    overrides?.nodeEnv !== undefined
+      ? overrides.nodeEnv === 'production'
+      : process.env.NODE_ENV === 'production';
+  const allowPrivateWebhooks =
+    overrides?.allowPrivateWebhooks !== undefined
+      ? overrides.allowPrivateWebhooks
+      : process.env.ALERT_ALLOW_PRIVATE_WEBHOOKS === 'true';
+
+  if (isProduction && allowPrivateWebhooks) {
+    throw new Error(
+      'FATAL CONFIGURATION ERROR: ALERT_ALLOW_PRIVATE_WEBHOOKS=true is strictly prohibited in production.'
+    );
+  }
+
+  const mode = (overrides?.deliveryMode ?? process.env.ALERT_DELIVERY_MODE ?? 'dry_run')
+    .toLowerCase()
+    .trim();
+  if (mode === 'live' && isProduction) {
+    const hasAdminToken =
+      overrides?.hasAdminToken !== undefined
+        ? overrides.hasAdminToken
+        : Boolean(process.env.ALERT_ADMIN_TOKEN && process.env.ALERT_ADMIN_TOKEN.trim());
+    const hasSigningSecret =
+      overrides?.hasSigningSecret !== undefined
+        ? overrides.hasSigningSecret
+        : Boolean(
+            process.env.ALERT_WEBHOOK_SIGNING_SECRET && process.env.ALERT_WEBHOOK_SIGNING_SECRET.trim()
+          );
+    if (!hasAdminToken || !hasSigningSecret) {
+      const err =
+        '[AlertDispatcher FATAL] ALERT_DELIVERY_MODE=live in production requires ALERT_ADMIN_TOKEN and ALERT_WEBHOOK_SIGNING_SECRET. Refusing to start dispatcher.';
+      console.error(err);
+      return { canStart: false, error: err };
+    }
+  }
+
+  return { canStart: true };
+}
 
 export class AlertDispatcher {
   private store: IAlertDeliveryStore;
@@ -116,6 +175,11 @@ export class AlertDispatcher {
     let failedCount = 0;
 
     try {
+      // 1. Recover any stuck SENDING rows whose lease has expired
+      await this.store.reclaimStuckLeases().catch((err) => {
+        console.error('[AlertDispatcher] Error reclaiming stuck leases:', err);
+      });
+
       // Claim pending rows safely with SKIP LOCKED
       const items = await this.store.claimPendingOutboxItems(10);
       if (items.length === 0) {
@@ -175,11 +239,12 @@ export class AlertDispatcher {
 
         for (const recipient of eligibleRecipients) {
           let sendResult: { success: boolean; statusCode?: number; responseBody?: string; error?: string };
+          const idempotencyKey = generateDeliveryIdempotencyKey(item.dedupe_key, recipient.id);
 
           if (recipient.channel === 'webhook') {
-            sendResult = await sendWebhookAlert(recipient, item.payload);
+            sendResult = await sendWebhookAlert(recipient, item.payload, idempotencyKey);
           } else if (recipient.channel === 'email') {
-            sendResult = await sendEmailAlert(recipient, item.payload);
+            sendResult = await sendEmailAlert(recipient, item.payload, idempotencyKey);
           } else {
             sendResult = { success: false, error: `Unsupported channel "${recipient.channel}"` };
           }
@@ -239,6 +304,13 @@ export class AlertDispatcher {
 
   public startDispatcher(): void {
     if (this.timer) return;
+
+    // Startup safety check (throws if private webhooks in production, stops if live mode unconfigured)
+    const safety = validateAlertSafetyConfig();
+    if (!safety.canStart) {
+      return;
+    }
+
     const mode = this.getMode();
     const isProduction = process.env.NODE_ENV === 'production';
 

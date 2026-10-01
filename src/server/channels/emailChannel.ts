@@ -125,7 +125,8 @@ Dashboard: ${message.dashboard_url}
 
 export async function sendEmailAlert(
   recipient: RecipientRecord,
-  message: StructuredAlertMessage
+  message: StructuredAlertMessage,
+  idempotencyKey?: string
 ): Promise<ChannelSendResult> {
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT || '587', 10);
@@ -152,14 +153,20 @@ export async function sendEmailAlert(
   const isTest = message.is_test === true;
   const subject = `${isTest ? '[TEST ALERT] ' : ''}Air Quality Alert [${message.tier.toUpperCase()}]: ${message.city} (${(message.probability * 100).toFixed(0)}%)`;
 
+  const mailOptions: any = {
+    from: fromAddress,
+    to: recipient.destination,
+    subject,
+    text,
+    html,
+  };
+
+  if (idempotencyKey) {
+    mailOptions.messageId = `<${idempotencyKey}@alerts.vayudrishti.org>`;
+  }
+
   try {
-    const info = await transporter.sendMail({
-      from: fromAddress,
-      to: recipient.destination,
-      subject,
-      text,
-      html,
-    });
+    const info = await transporter.sendMail(mailOptions);
 
     return {
       success: true,

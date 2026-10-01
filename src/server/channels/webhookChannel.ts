@@ -100,7 +100,8 @@ export function signWebhookPayload(secret: string, timestamp: string, body: stri
 
 export async function sendWebhookAlert(
   recipient: RecipientRecord,
-  message: StructuredAlertMessage
+  message: StructuredAlertMessage,
+  idempotencyKey?: string
 ): Promise<ChannelSendResult> {
   const url = recipient.destination;
 
@@ -116,26 +117,38 @@ export async function sendWebhookAlert(
   const signingSecret =
     recipient.secret_key || process.env.ALERT_WEBHOOK_SIGNING_SECRET || 'vayudrishti_webhook_default_secret';
   const timestamp = new Date().toISOString();
-  const bodyString = JSON.stringify({
+  const bodyPayload: Record<string, any> = {
     event: 'air_quality.acute_spike_alert',
     timestamp,
     data: message,
-  });
+  };
 
+  if (idempotencyKey) {
+    bodyPayload.delivery_id = idempotencyKey;
+    bodyPayload.idempotency_key = idempotencyKey;
+  }
+
+  const bodyString = JSON.stringify(bodyPayload);
   const signature = signWebhookPayload(signingSecret, timestamp, bodyString);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'VayuDrishti-Alert-Dispatcher/1.0',
+    'X-VayuDrishti-Timestamp': timestamp,
+    'X-VayuDrishti-Signature': `sha256=${signature}`,
+  };
+
+  if (idempotencyKey) {
+    headers['Idempotency-Key'] = idempotencyKey;
+  }
+
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'VayuDrishti-Alert-Dispatcher/1.0',
-        'X-VayuDrishti-Timestamp': timestamp,
-        'X-VayuDrishti-Signature': `sha256=${signature}`,
-      },
+      headers,
       body: bodyString,
       signal: controller.signal,
     });
