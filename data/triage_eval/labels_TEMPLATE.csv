@@ -1,0 +1,7 @@
+filename,label
+example_smoke_01.jpg,smoke
+example_fire_01.jpg,fire
+example_haze_01.jpg,haze_fog
+example_dust_01.jpg,dust
+example_clear_01.jpg,clear_normal
+example_indoor_01.jpg,not_relevant
