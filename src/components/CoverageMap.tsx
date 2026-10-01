@@ -5,6 +5,7 @@ import {
   RotateCcw,
   Users,
   X,
+  Camera,
 } from 'lucide-react';
 import type {
   PopulationCell,
@@ -12,6 +13,7 @@ import type {
   City,
   GapCity,
 } from '../types/dashboard';
+import type { PublicCitizenReport } from '../types/citizenReport';
 import {
   buildPopulationCellsGeoJSON,
   createCoverageRingsGeoJSON,
@@ -46,8 +48,11 @@ export const CoverageMap: React.FC<CoverageMapProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const citizenMarkersRef = useRef<maplibregl.Marker[]>([]);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [selectedCluster, setSelectedCluster] = useState<CityStationCluster | null>(null);
+  const [showCitizenReports, setShowCitizenReports] = useState(false);
+  const [citizenReports, setCitizenReports] = useState<PublicCitizenReport[]>([]);
 
   // Group stations by city so markers never stack invisibly
   const clusters = React.useMemo(() => groupStationsByCity(stations), [stations]);
@@ -206,6 +211,8 @@ export const CoverageMap: React.FC<CoverageMapProps> = ({
       resizeObserver.disconnect();
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
+      citizenMarkersRef.current.forEach((m) => m.remove());
+      citizenMarkersRef.current = [];
       map.remove();
       mapRef.current = null;
     };
@@ -432,6 +439,82 @@ export const CoverageMap: React.FC<CoverageMapProps> = ({
     });
   }, [clusters, gapCities, mapLoaded, onSelectCity, drawCoverageRings, clearCoverageRings]);
 
+  // Synchronize Citizen Photo Report Markers
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded) return;
+    const map = mapRef.current;
+
+    // Clear previous citizen markers
+    citizenMarkersRef.current.forEach((m) => m.remove());
+    citizenMarkersRef.current = [];
+
+    if (!showCitizenReports) return;
+
+    // Fetch reports if empty
+    if (citizenReports.length === 0) {
+      fetch('/api/reports?limit=50')
+        .then((r) => (r.ok ? r.json() : { reports: [] }))
+        .then((data) => {
+          if (data.reports) setCitizenReports(data.reports);
+        })
+        .catch(() => {});
+    }
+
+    const escapeHtml = (str: string): string =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    citizenReports.forEach((report) => {
+      const el = document.createElement('div');
+      el.className = 'citizen-report-marker cursor-pointer select-none group';
+      el.innerHTML = `
+        <div class="relative flex items-center justify-center">
+          <div class="w-7 h-7 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs shadow-md ring-2 ring-white hover:scale-125 transition-transform">
+            📷
+          </div>
+        </div>
+      `;
+
+      const safeCategory = escapeHtml(report.category || 'other');
+      const safeDesc = escapeHtml(report.description || 'Ground observation.');
+      const safeStation = escapeHtml(report.nearest_station_name || 'Station');
+      const safeThumb = report.thumb_url.replace(/"/g, '&quot;');
+
+      const popupHtml = `
+        <div style="font-family: system-ui, sans-serif; font-size: 12px; color: #0f172a; max-width: 240px; padding: 4px;">
+          <div style="width: 100%; height: 110px; border-radius: 6px; overflow: hidden; background: #e2e8f0; margin-bottom: 6px;">
+            <img src="${safeThumb}" alt="${safeCategory}" style="width: 100%; height: 100%; object-fit: cover;" />
+          </div>
+          <div style="font-weight: 700; color: #d97706; text-transform: uppercase; font-size: 10px; margin-bottom: 4px;">
+            ${safeCategory}
+          </div>
+          <div style="font-size: 11px; color: #334155; margin-bottom: 6px; line-height: 1.3;">
+            ${safeDesc}
+          </div>
+          <div style="font-size: 9px; color: #64748b; margin-bottom: 4px;">
+            Nearest: ${safeStation} (${report.nearest_station_distance_km ?? 0} km)
+          </div>
+          <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 4px; padding: 3px 6px; font-size: 9px; color: #92400e; font-weight: 500;">
+            ⚠ Unverified observation. Not used in predictive models.
+          </div>
+        </div>
+      `;
+
+      const popup = new maplibregl.Popup({ offset: 15, maxWidth: '260px' }).setHTML(popupHtml);
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([report.lon, report.lat])
+        .setPopup(popup)
+        .addTo(map);
+
+      citizenMarkersRef.current.push(marker);
+    });
+  }, [showCitizenReports, citizenReports, mapLoaded]);
+
   // Pan to selected city when changed from right panel
   useEffect(() => {
     if (!mapRef.current || !selectedCity) return;
@@ -480,6 +563,21 @@ export const CoverageMap: React.FC<CoverageMapProps> = ({
         >
           <Users className="w-3.5 h-3.5" />
           <span>{isUnderservedMode ? 'Underserved mode: ON (>100 km)' : 'Highlight underserved population'}</span>
+        </button>
+
+        {/* Citizen Observations Layer Toggle */}
+        <button
+          onClick={() => setShowCitizenReports(!showCitizenReports)}
+          className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg shadow-elevation2 backdrop-blur-md transition-all cursor-pointer ${
+            showCitizenReports
+              ? 'bg-amber-600 text-white ring-2 ring-amber-300'
+              : 'bg-surface-card/95 hover:bg-surface-card text-fg-primary border border-surface-border'
+          }`}
+          aria-pressed={showCitizenReports}
+          title="Toggle citizen photo observations overlay"
+        >
+          <Camera className="w-3.5 h-3.5" />
+          <span>{showCitizenReports ? 'Citizen observations: ON' : 'Citizen observations'}</span>
         </button>
 
         {/* Reset View Button */}

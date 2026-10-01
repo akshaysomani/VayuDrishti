@@ -12,6 +12,9 @@ import { CityExposureCard } from './alerts/CityExposureCard';
 import { FireContextPanel } from './alerts/FireContextPanel';
 import { ReliabilityCard } from './alerts/ReliabilityCard';
 import { LimitsSection } from './alerts/LimitsSection';
+import { LiveAlertCard } from './alerts/LiveAlertCard';
+import { CitizenReportsSection } from './citizen/CitizenReportsSection';
+import { AlertDeliveryPanel } from './alerts/AlertDeliveryPanel';
 
 import alertDataRaw from '../data/alert_data.json';
 
@@ -100,6 +103,21 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ onNavigateToMonitoring }
       {/* SECTION A: Header, persistent backtest banner & data partitioning */}
       <div className="alerts-section-card">
         <AlertsHeader meta={data.meta} />
+      </div>
+
+      {/* SECTION LIVE: Thin End-to-End Live WAQI Demonstration Slice */}
+      <div className="alerts-section-card">
+        <LiveAlertCard />
+      </div>
+
+      {/* SECTION CITIZEN: Ground-Level Photo Context (Phase 5 f3) */}
+      <div className="alerts-section-card">
+        <CitizenReportsSection />
+      </div>
+
+      {/* SECTION DELIVERY: Authority Alert Delivery (Phase 5 f4) */}
+      <div className="alerts-section-card">
+        <AlertDeliveryPanel />
       </div>
 
       {/* SECTION B: Baseline comparison card (First card after header, always shown) */}
