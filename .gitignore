@@ -4,6 +4,11 @@ dist/
 .agents/
 .system_generated/
 
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
 # Python cache & logs
 __pycache__/
 *.py[cod]
@@ -40,9 +45,16 @@ cpcb_data/
 air_quality/
 rainfall/
 fire/
+/fire/
 smoke/
-/data/
+/smoke/
+/data/*
+!/data/triage_eval/
 !src/data/
+src/data/live_history/
+src/data/uploads/
+src/data/citizen_reports/
+uploads/
 beijing+pm2+5+data/
 
 # Large parquet and tabular datasets
@@ -53,3 +65,30 @@ beijing+pm2+5+data/
 
 # Scratch directory
 scratch/
+
+# Triage Model Cache & Human Evaluation Images (f3b)
+.model_cache/
+models/
+model/
+models/probe/
+model/probe*
+data/triage_train/
+data/triage_eval/*
+!data/triage_eval/README.md
+!data/triage_eval/labels_TEMPLATE.csv
+
+# Model Weights & Binary Checkpoints
+*.onnx
+*.safetensors
+*.bin
+
+# Database Dumps & Backups
+*.dump
+*.sql.dump
+*.bak
+*.tar
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+
