@@ -1,0 +1,44 @@
+[
+  {
+    "city": "Delhi",
+    "lat": 28.6358,
+    "lon": 77.2144,
+    "n_days": 1308,
+    "date_range": "1998-01-01 to 2001-07-31",
+    "correlation_r": 0.3536,
+    "mean_om_mm": 2.09,
+    "mean_chirps_mm": 1.92,
+    "mean_bias_mm": 0.17,
+    "mae_mm": 2.32,
+    "heavy_days_om": 4,
+    "heavy_days_chirps": 2
+  },
+  {
+    "city": "Mumbai",
+    "lat": 19.076,
+    "lon": 72.8777,
+    "n_days": 1308,
+    "date_range": "1998-01-01 to 2001-07-31",
+    "correlation_r": 0.712,
+    "mean_om_mm": 4.66,
+    "mean_chirps_mm": 6.57,
+    "mean_bias_mm": -1.91,
+    "mae_mm": 4.87,
+    "heavy_days_om": 13,
+    "heavy_days_chirps": 34
+  },
+  {
+    "city": "Kolkata",
+    "lat": 22.5726,
+    "lon": 88.3639,
+    "n_days": 1308,
+    "date_range": "1998-01-01 to 2001-07-31",
+    "correlation_r": 0.5462,
+    "mean_om_mm": 4.21,
+    "mean_chirps_mm": 5.14,
+    "mean_bias_mm": -0.93,
+    "mae_mm": 4.32,
+    "heavy_days_om": 3,
+    "heavy_days_chirps": 7
+  }
+]

@@ -23,7 +23,11 @@
     "Citizen Triage": {
       "script": "scripts/test_triage.ts",
       "baseline_total": 78
+    },
+    "Rainfall Data": {
+      "script": "scripts/test_rainfall_data.ts",
+      "baseline_total": 56
     }
   },
-  "overall_baseline_total": 479
+  "overall_baseline_total": 535
 }

@@ -1,0 +1,1288 @@
+{
+  "generated_at": "2026-10-02T08:22:05.122Z",
+  "wmo_normal_period": "1991-2020",
+  "model": "ECMWF ERA5 via Open-Meteo",
+  "attribution": {
+    "text": "Weather data by Open-Meteo.com",
+    "url": "https://open-meteo.com/",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  "wet_day_threshold_mm": 1,
+  "cities": {
+    "Ahmedabad": {
+      "city": "Ahmedabad",
+      "latitude": 23.0258,
+      "longitude": 72.5873,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 1636,
+        "wet_day_percentage": 14.93,
+        "mean_annual_precipitation_mm": 719.6,
+        "daily_percentiles": {
+          "p80_mm": 16.6,
+          "p90_mm": 31.95,
+          "p95_mm": 49.52,
+          "p98_mm": 82.59
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 33.06,
+          "p90_mm": 63.53,
+          "p95_mm": 98.79,
+          "p98_mm": 160.2
+        },
+        "mean_annual_max_daily_mm": 115.8,
+        "all_time_max_daily_mm": 349.4,
+        "all_time_max_daily_date": "2017-07-14"
+      },
+      "monsoon": {
+        "wet_day_count": 1493,
+        "wet_day_percentage": 40.79,
+        "monsoon_precipitation_share_pct": 96.2,
+        "daily_percentiles": {
+          "p80_mm": 17.72,
+          "p90_mm": 34.04,
+          "p95_mm": 52.3,
+          "p98_mm": 89.23
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 37.56,
+          "p90_mm": 72.2,
+          "p95_mm": 111.38,
+          "p98_mm": 166.39
+        },
+        "mean_annual_max_daily_mm": 115.8,
+        "max_daily_mm": 349.4,
+        "max_daily_date": "2017-07-14"
+      }
+    },
+    "Aizawl": {
+      "city": "Aizawl",
+      "latitude": 23.7289,
+      "longitude": 92.7179,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 5638,
+        "wet_day_percentage": 51.45,
+        "mean_annual_precipitation_mm": 1770.7,
+        "daily_percentiles": {
+          "p80_mm": 13.9,
+          "p90_mm": 19.6,
+          "p95_mm": 26.5,
+          "p98_mm": 37.35
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 34.8,
+          "p90_mm": 47.9,
+          "p95_mm": 62.64,
+          "p98_mm": 88.8
+        },
+        "mean_annual_max_daily_mm": 87.1,
+        "all_time_max_daily_mm": 360.4,
+        "all_time_max_daily_date": "1998-05-27"
+      },
+      "monsoon": {
+        "wet_day_count": 3415,
+        "wet_day_percentage": 93.31,
+        "monsoon_precipitation_share_pct": 65.9,
+        "daily_percentiles": {
+          "p80_mm": 15.2,
+          "p90_mm": 20.66,
+          "p95_mm": 27.4,
+          "p98_mm": 38.19
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 41.3,
+          "p90_mm": 53.56,
+          "p95_mm": 68.58,
+          "p98_mm": 95.72
+        },
+        "mean_annual_max_daily_mm": 67.8,
+        "max_daily_mm": 199.1,
+        "max_daily_date": "2015-07-25"
+      }
+    },
+    "Amaravati": {
+      "city": "Amaravati",
+      "latitude": 16.5131,
+      "longitude": 80.5165,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 3073,
+        "wet_day_percentage": 28.04,
+        "mean_annual_precipitation_mm": 935.1,
+        "daily_percentiles": {
+          "p80_mm": 12.5,
+          "p90_mm": 19.4,
+          "p95_mm": 27.84,
+          "p98_mm": 43.07
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 27,
+          "p90_mm": 41.7,
+          "p95_mm": 55.72,
+          "p98_mm": 84.97
+        },
+        "mean_annual_max_daily_mm": 76.5,
+        "all_time_max_daily_mm": 160.8,
+        "all_time_max_daily_date": "2015-11-17"
+      },
+      "monsoon": {
+        "wet_day_count": 2027,
+        "wet_day_percentage": 55.38,
+        "monsoon_precipitation_share_pct": 70.9,
+        "daily_percentiles": {
+          "p80_mm": 13.6,
+          "p90_mm": 20.94,
+          "p95_mm": 28.5,
+          "p98_mm": 42.64
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 32,
+          "p90_mm": 45.55,
+          "p95_mm": 61.33,
+          "p98_mm": 90.63
+        },
+        "mean_annual_max_daily_mm": 66.8,
+        "max_daily_mm": 134.7,
+        "max_daily_date": "2009-09-30"
+      }
+    },
+    "Amritsar": {
+      "city": "Amritsar",
+      "latitude": 31.634,
+      "longitude": 74.8723,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 2866,
+        "wet_day_percentage": 26.15,
+        "mean_annual_precipitation_mm": 752.8,
+        "daily_percentiles": {
+          "p80_mm": 11.5,
+          "p90_mm": 17.7,
+          "p95_mm": 24.8,
+          "p98_mm": 35.37
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 21.9,
+          "p90_mm": 32.8,
+          "p95_mm": 44.9,
+          "p98_mm": 60.4
+        },
+        "mean_annual_max_daily_mm": 56.2,
+        "all_time_max_daily_mm": 132.3,
+        "all_time_max_daily_date": "2013-06-15"
+      },
+      "monsoon": {
+        "wet_day_count": 1800,
+        "wet_day_percentage": 49.18,
+        "monsoon_precipitation_share_pct": 65.6,
+        "daily_percentiles": {
+          "p80_mm": 11.7,
+          "p90_mm": 17.7,
+          "p95_mm": 24.41,
+          "p98_mm": 35.92
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 25.5,
+          "p90_mm": 38.18,
+          "p95_mm": 50.74,
+          "p98_mm": 65.57
+        },
+        "mean_annual_max_daily_mm": 53.1,
+        "max_daily_mm": 132.3,
+        "max_daily_date": "2013-06-15"
+      }
+    },
+    "Bengaluru": {
+      "city": "Bengaluru",
+      "latitude": 12.9744,
+      "longitude": 77.5833,
+      "stationCount": 8,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 3895,
+        "wet_day_percentage": 35.54,
+        "mean_annual_precipitation_mm": 905.3,
+        "daily_percentiles": {
+          "p80_mm": 10.4,
+          "p90_mm": 14.8,
+          "p95_mm": 19.2,
+          "p98_mm": 24.21
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 22.6,
+          "p90_mm": 31.7,
+          "p95_mm": 39.4,
+          "p98_mm": 49.9
+        },
+        "mean_annual_max_daily_mm": 43.8,
+        "all_time_max_daily_mm": 123.8,
+        "all_time_max_daily_date": "2015-11-16"
+      },
+      "monsoon": {
+        "wet_day_count": 2224,
+        "wet_day_percentage": 60.77,
+        "monsoon_precipitation_share_pct": 54.3,
+        "daily_percentiles": {
+          "p80_mm": 9.9,
+          "p90_mm": 13.67,
+          "p95_mm": 18.3,
+          "p98_mm": 23.71
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 22.6,
+          "p90_mm": 31.5,
+          "p95_mm": 38.7,
+          "p98_mm": 49.07
+        },
+        "mean_annual_max_daily_mm": 32.5,
+        "max_daily_mm": 58.6,
+        "max_daily_date": "1996-09-24"
+      }
+    },
+    "Bhopal": {
+      "city": "Bhopal",
+      "latitude": 23.2547,
+      "longitude": 77.4029,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 2615,
+        "wet_day_percentage": 23.86,
+        "mean_annual_precipitation_mm": 1037.7,
+        "daily_percentiles": {
+          "p80_mm": 17.12,
+          "p90_mm": 27.56,
+          "p95_mm": 38.56,
+          "p98_mm": 55.9
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 39.6,
+          "p90_mm": 60.41,
+          "p95_mm": 85.35,
+          "p98_mm": 120.47
+        },
+        "mean_annual_max_daily_mm": 96.8,
+        "all_time_max_daily_mm": 205.9,
+        "all_time_max_daily_date": "2015-07-19"
+      },
+      "monsoon": {
+        "wet_day_count": 2201,
+        "wet_day_percentage": 60.14,
+        "monsoon_precipitation_share_pct": 91.6,
+        "daily_percentiles": {
+          "p80_mm": 18.7,
+          "p90_mm": 29.8,
+          "p95_mm": 40.6,
+          "p98_mm": 61.8
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 46.2,
+          "p90_mm": 69.55,
+          "p95_mm": 94.95,
+          "p98_mm": 130.94
+        },
+        "mean_annual_max_daily_mm": 96.7,
+        "max_daily_mm": 205.9,
+        "max_daily_date": "2015-07-19"
+      }
+    },
+    "Brajrajnagar": {
+      "city": "Brajrajnagar",
+      "latitude": 21.8285,
+      "longitude": 83.9176,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 3510,
+        "wet_day_percentage": 32.03,
+        "mean_annual_precipitation_mm": 1401.5,
+        "daily_percentiles": {
+          "p80_mm": 17.4,
+          "p90_mm": 26.4,
+          "p95_mm": 36.9,
+          "p98_mm": 54.38
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 41.78,
+          "p90_mm": 60.8,
+          "p95_mm": 81.5,
+          "p98_mm": 113.31
+        },
+        "mean_annual_max_daily_mm": 88.3,
+        "all_time_max_daily_mm": 237.8,
+        "all_time_max_daily_date": "1994-07-13"
+      },
+      "monsoon": {
+        "wet_day_count": 2784,
+        "wet_day_percentage": 76.07,
+        "monsoon_precipitation_share_pct": 88.2,
+        "daily_percentiles": {
+          "p80_mm": 19.3,
+          "p90_mm": 28.47,
+          "p95_mm": 40.25,
+          "p98_mm": 56.04
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 51,
+          "p90_mm": 70.34,
+          "p95_mm": 95.54,
+          "p98_mm": 131.02
+        },
+        "mean_annual_max_daily_mm": 87.5,
+        "max_daily_mm": 237.8,
+        "max_daily_date": "1994-07-13"
+      }
+    },
+    "Chandigarh": {
+      "city": "Chandigarh",
+      "latitude": 30.7514,
+      "longitude": 76.757,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 2833,
+        "wet_day_percentage": 25.85,
+        "mean_annual_precipitation_mm": 756.9,
+        "daily_percentiles": {
+          "p80_mm": 10.4,
+          "p90_mm": 17.3,
+          "p95_mm": 25.74,
+          "p98_mm": 43.34
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 18.4,
+          "p90_mm": 31.9,
+          "p95_mm": 48.64,
+          "p98_mm": 82.76
+        },
+        "mean_annual_max_daily_mm": 79.9,
+        "all_time_max_daily_mm": 207.1,
+        "all_time_max_daily_date": "2010-09-13"
+      },
+      "monsoon": {
+        "wet_day_count": 1850,
+        "wet_day_percentage": 50.55,
+        "monsoon_precipitation_share_pct": 72.3,
+        "daily_percentiles": {
+          "p80_mm": 11.42,
+          "p90_mm": 19.52,
+          "p95_mm": 31.65,
+          "p98_mm": 54
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 24.94,
+          "p90_mm": 41.3,
+          "p95_mm": 62.6,
+          "p98_mm": 99.25
+        },
+        "mean_annual_max_daily_mm": 77.6,
+        "max_daily_mm": 207.1,
+        "max_daily_date": "2010-09-13"
+      }
+    },
+    "Chennai": {
+      "city": "Chennai",
+      "latitude": 13.0387,
+      "longitude": 80.2439,
+      "stationCount": 4,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 3384,
+        "wet_day_percentage": 30.88,
+        "mean_annual_precipitation_mm": 966.5,
+        "daily_percentiles": {
+          "p80_mm": 11.6,
+          "p90_mm": 18.3,
+          "p95_mm": 26.95,
+          "p98_mm": 45.9
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 22.7,
+          "p90_mm": 37.4,
+          "p95_mm": 58.7,
+          "p98_mm": 92.5
+        },
+        "mean_annual_max_daily_mm": 78.1,
+        "all_time_max_daily_mm": 199.7,
+        "all_time_max_daily_date": "1996-06-13"
+      },
+      "monsoon": {
+        "wet_day_count": 1680,
+        "wet_day_percentage": 45.9,
+        "monsoon_precipitation_share_pct": 34.5,
+        "daily_percentiles": {
+          "p80_mm": 8.3,
+          "p90_mm": 12.8,
+          "p95_mm": 17,
+          "p98_mm": 22.24
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 16.8,
+          "p90_mm": 24.35,
+          "p95_mm": 32.7,
+          "p98_mm": 43.98
+        },
+        "mean_annual_max_daily_mm": 31.5,
+        "max_daily_mm": 199.7,
+        "max_daily_date": "1996-06-13"
+      }
+    },
+    "Coimbatore": {
+      "city": "Coimbatore",
+      "latitude": 11.0168,
+      "longitude": 76.9558,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 4165,
+        "wet_day_percentage": 38.01,
+        "mean_annual_precipitation_mm": 889,
+        "daily_percentiles": {
+          "p80_mm": 8.5,
+          "p90_mm": 13.5,
+          "p95_mm": 19.48,
+          "p98_mm": 29.4
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 17.4,
+          "p90_mm": 28.5,
+          "p95_mm": 40.64,
+          "p98_mm": 57.48
+        },
+        "mean_annual_max_daily_mm": 54,
+        "all_time_max_daily_mm": 139.2,
+        "all_time_max_daily_date": "2015-05-17"
+      },
+      "monsoon": {
+        "wet_day_count": 1841,
+        "wet_day_percentage": 50.3,
+        "monsoon_precipitation_share_pct": 43.6,
+        "daily_percentiles": {
+          "p80_mm": 8.5,
+          "p90_mm": 13.5,
+          "p95_mm": 19.3,
+          "p98_mm": 28.42
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 18,
+          "p90_mm": 28.28,
+          "p95_mm": 38.94,
+          "p98_mm": 55.49
+        },
+        "mean_annual_max_daily_mm": 35.6,
+        "max_daily_mm": 109.7,
+        "max_daily_date": "1991-06-04"
+      }
+    },
+    "Delhi": {
+      "city": "Delhi",
+      "latitude": 28.6484,
+      "longitude": 77.1706,
+      "stationCount": 37,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 2491,
+        "wet_day_percentage": 22.73,
+        "mean_annual_precipitation_mm": 680.7,
+        "daily_percentiles": {
+          "p80_mm": 12,
+          "p90_mm": 17.8,
+          "p95_mm": 24.65,
+          "p98_mm": 34.8
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 23.8,
+          "p90_mm": 35.8,
+          "p95_mm": 48.95,
+          "p98_mm": 67.6
+        },
+        "mean_annual_max_daily_mm": 62.2,
+        "all_time_max_daily_mm": 184.1,
+        "all_time_max_daily_date": "1999-07-28"
+      },
+      "monsoon": {
+        "wet_day_count": 1806,
+        "wet_day_percentage": 49.34,
+        "monsoon_precipitation_share_pct": 78.7,
+        "daily_percentiles": {
+          "p80_mm": 13.1,
+          "p90_mm": 18.7,
+          "p95_mm": 25.6,
+          "p98_mm": 36.54
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 29.6,
+          "p90_mm": 42.4,
+          "p95_mm": 57.98,
+          "p98_mm": 78.88
+        },
+        "mean_annual_max_daily_mm": 58,
+        "max_daily_mm": 184.1,
+        "max_daily_date": "1999-07-28"
+      }
+    },
+    "Ernakulam": {
+      "city": "Ernakulam",
+      "latitude": 9.9399,
+      "longitude": 76.2602,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 6574,
+        "wet_day_percentage": 59.99,
+        "mean_annual_precipitation_mm": 2544.4,
+        "daily_percentiles": {
+          "p80_mm": 17.9,
+          "p90_mm": 25.97,
+          "p95_mm": 34.8,
+          "p98_mm": 48.5
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 46,
+          "p90_mm": 66.4,
+          "p95_mm": 87.43,
+          "p98_mm": 113.61
+        },
+        "mean_annual_max_daily_mm": 90.2,
+        "all_time_max_daily_mm": 327.5,
+        "all_time_max_daily_date": "1998-05-15"
+      },
+      "monsoon": {
+        "wet_day_count": 3409,
+        "wet_day_percentage": 93.14,
+        "monsoon_precipitation_share_pct": 62.8,
+        "daily_percentiles": {
+          "p80_mm": 21.9,
+          "p90_mm": 30.5,
+          "p95_mm": 38.56,
+          "p98_mm": 51.24
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 62.8,
+          "p90_mm": 82.71,
+          "p95_mm": 103.1,
+          "p98_mm": 128.09
+        },
+        "mean_annual_max_daily_mm": 70.8,
+        "max_daily_mm": 129.3,
+        "max_daily_date": "2018-08-15"
+      }
+    },
+    "Gurugram": {
+      "city": "Gurugram",
+      "latitude": 28.4485,
+      "longitude": 77.0575,
+      "stationCount": 4,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 2391,
+        "wet_day_percentage": 21.82,
+        "mean_annual_precipitation_mm": 640.8,
+        "daily_percentiles": {
+          "p80_mm": 11.5,
+          "p90_mm": 17.7,
+          "p95_mm": 23.9,
+          "p98_mm": 36.2
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 22.5,
+          "p90_mm": 34.6,
+          "p95_mm": 47,
+          "p98_mm": 72
+        },
+        "mean_annual_max_daily_mm": 61.1,
+        "all_time_max_daily_mm": 207.6,
+        "all_time_max_daily_date": "1999-07-28"
+      },
+      "monsoon": {
+        "wet_day_count": 1735,
+        "wet_day_percentage": 47.4,
+        "monsoon_precipitation_share_pct": 79.6,
+        "daily_percentiles": {
+          "p80_mm": 12.5,
+          "p90_mm": 18.7,
+          "p95_mm": 24.95,
+          "p98_mm": 38.3
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 28.5,
+          "p90_mm": 41.3,
+          "p95_mm": 57.6,
+          "p98_mm": 79.4
+        },
+        "mean_annual_max_daily_mm": 58.6,
+        "max_daily_mm": 207.6,
+        "max_daily_date": "1999-07-28"
+      }
+    },
+    "Guwahati": {
+      "city": "Guwahati",
+      "latitude": 26.1796,
+      "longitude": 91.7843,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 5823,
+        "wet_day_percentage": 53.14,
+        "mean_annual_precipitation_mm": 2938.2,
+        "daily_percentiles": {
+          "p80_mm": 23.1,
+          "p90_mm": 34.8,
+          "p95_mm": 47.4,
+          "p98_mm": 66.7
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 60.12,
+          "p90_mm": 86,
+          "p95_mm": 112.85,
+          "p98_mm": 150.93
+        },
+        "mean_annual_max_daily_mm": 114,
+        "all_time_max_daily_mm": 206.5,
+        "all_time_max_daily_date": "1995-06-16"
+      },
+      "monsoon": {
+        "wet_day_count": 3439,
+        "wet_day_percentage": 93.96,
+        "monsoon_precipitation_share_pct": 74.9,
+        "daily_percentiles": {
+          "p80_mm": 28.94,
+          "p90_mm": 41.8,
+          "p95_mm": 55.3,
+          "p98_mm": 76.95
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 81.22,
+          "p90_mm": 107.8,
+          "p95_mm": 136.82,
+          "p98_mm": 174.52
+        },
+        "mean_annual_max_daily_mm": 108.5,
+        "max_daily_mm": 206.5,
+        "max_daily_date": "1995-06-16"
+      }
+    },
+    "Hyderabad": {
+      "city": "Hyderabad",
+      "latitude": 17.3809,
+      "longitude": 78.4646,
+      "stationCount": 6,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 2845,
+        "wet_day_percentage": 25.96,
+        "mean_annual_precipitation_mm": 747.5,
+        "daily_percentiles": {
+          "p80_mm": 11.5,
+          "p90_mm": 16.9,
+          "p95_mm": 23.76,
+          "p98_mm": 35.71
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 22.9,
+          "p90_mm": 35.7,
+          "p95_mm": 49.52,
+          "p98_mm": 69.6
+        },
+        "mean_annual_max_daily_mm": 52.4,
+        "all_time_max_daily_mm": 94,
+        "all_time_max_daily_date": "2020-10-13"
+      },
+      "monsoon": {
+        "wet_day_count": 1985,
+        "wet_day_percentage": 54.23,
+        "monsoon_precipitation_share_pct": 77,
+        "daily_percentiles": {
+          "p80_mm": 12.8,
+          "p90_mm": 18.1,
+          "p95_mm": 25.9,
+          "p98_mm": 36.29
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 28,
+          "p90_mm": 41.1,
+          "p95_mm": 56.51,
+          "p98_mm": 73.92
+        },
+        "mean_annual_max_daily_mm": 49.1,
+        "max_daily_mm": 92.4,
+        "max_daily_date": "2005-09-20"
+      }
+    },
+    "Jaipur": {
+      "city": "Jaipur",
+      "latitude": 26.9223,
+      "longitude": 75.7875,
+      "stationCount": 3,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 2010,
+        "wet_day_percentage": 18.34,
+        "mean_annual_precipitation_mm": 511.3,
+        "daily_percentiles": {
+          "p80_mm": 11,
+          "p90_mm": 16.4,
+          "p95_mm": 22.42,
+          "p98_mm": 32.9
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 22.4,
+          "p90_mm": 33.7,
+          "p95_mm": 46,
+          "p98_mm": 67.82
+        },
+        "mean_annual_max_daily_mm": 51.5,
+        "all_time_max_daily_mm": 125.9,
+        "all_time_max_daily_date": "2012-08-22"
+      },
+      "monsoon": {
+        "wet_day_count": 1589,
+        "wet_day_percentage": 43.42,
+        "monsoon_precipitation_share_pct": 87.3,
+        "daily_percentiles": {
+          "p80_mm": 12.24,
+          "p90_mm": 17.9,
+          "p95_mm": 24.32,
+          "p98_mm": 36.32
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 27.6,
+          "p90_mm": 39.69,
+          "p95_mm": 52.44,
+          "p98_mm": 77.92
+        },
+        "mean_annual_max_daily_mm": 51.1,
+        "max_daily_mm": 125.9,
+        "max_daily_date": "2012-08-22"
+      }
+    },
+    "Jorapokhar": {
+      "city": "Jorapokhar",
+      "latitude": 23.707,
+      "longitude": 86.4127,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 3933,
+        "wet_day_percentage": 35.89,
+        "mean_annual_precipitation_mm": 1200.5,
+        "daily_percentiles": {
+          "p80_mm": 13.4,
+          "p90_mm": 19.38,
+          "p95_mm": 26.4,
+          "p98_mm": 38.57
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 31.18,
+          "p90_mm": 44.4,
+          "p95_mm": 59.27,
+          "p98_mm": 78.73
+        },
+        "mean_annual_max_daily_mm": 63.6,
+        "all_time_max_daily_mm": 142.6,
+        "all_time_max_daily_date": "2002-08-12"
+      },
+      "monsoon": {
+        "wet_day_count": 2898,
+        "wet_day_percentage": 79.18,
+        "monsoon_precipitation_share_pct": 81,
+        "daily_percentiles": {
+          "p80_mm": 14.4,
+          "p90_mm": 20.4,
+          "p95_mm": 28.2,
+          "p98_mm": 39.65
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 37.9,
+          "p90_mm": 51.29,
+          "p95_mm": 66.4,
+          "p98_mm": 87.49
+        },
+        "mean_annual_max_daily_mm": 62.1,
+        "max_daily_mm": 142.6,
+        "max_daily_date": "2002-08-12"
+      }
+    },
+    "Kochi": {
+      "city": "Kochi",
+      "latitude": 9.9399,
+      "longitude": 76.2602,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 6574,
+        "wet_day_percentage": 59.99,
+        "mean_annual_precipitation_mm": 2544.4,
+        "daily_percentiles": {
+          "p80_mm": 17.9,
+          "p90_mm": 25.97,
+          "p95_mm": 34.8,
+          "p98_mm": 48.5
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 46,
+          "p90_mm": 66.4,
+          "p95_mm": 87.43,
+          "p98_mm": 113.61
+        },
+        "mean_annual_max_daily_mm": 90.2,
+        "all_time_max_daily_mm": 327.5,
+        "all_time_max_daily_date": "1998-05-15"
+      },
+      "monsoon": {
+        "wet_day_count": 3409,
+        "wet_day_percentage": 93.14,
+        "monsoon_precipitation_share_pct": 62.8,
+        "daily_percentiles": {
+          "p80_mm": 21.9,
+          "p90_mm": 30.5,
+          "p95_mm": 38.56,
+          "p98_mm": 51.24
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 62.8,
+          "p90_mm": 82.71,
+          "p95_mm": 103.1,
+          "p98_mm": 128.09
+        },
+        "mean_annual_max_daily_mm": 70.8,
+        "max_daily_mm": 129.3,
+        "max_daily_date": "2018-08-15"
+      }
+    },
+    "Kolkata": {
+      "city": "Kolkata",
+      "latitude": 22.5467,
+      "longitude": 88.3669,
+      "stationCount": 7,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 4498,
+        "wet_day_percentage": 41.05,
+        "mean_annual_precipitation_mm": 1596.7,
+        "daily_percentiles": {
+          "p80_mm": 15.7,
+          "p90_mm": 22.9,
+          "p95_mm": 30.3,
+          "p98_mm": 44.42
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 37.3,
+          "p90_mm": 52.2,
+          "p95_mm": 69.21,
+          "p98_mm": 93.65
+        },
+        "mean_annual_max_daily_mm": 84.8,
+        "all_time_max_daily_mm": 173.5,
+        "all_time_max_daily_date": "2019-08-17"
+      },
+      "monsoon": {
+        "wet_day_count": 3148,
+        "wet_day_percentage": 86.01,
+        "monsoon_precipitation_share_pct": 73.4,
+        "daily_percentiles": {
+          "p80_mm": 16.3,
+          "p90_mm": 23.1,
+          "p95_mm": 30.9,
+          "p98_mm": 42.92
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 43.8,
+          "p90_mm": 59.3,
+          "p95_mm": 76.15,
+          "p98_mm": 99.72
+        },
+        "mean_annual_max_daily_mm": 71.9,
+        "max_daily_mm": 173.5,
+        "max_daily_date": "2019-08-17"
+      }
+    },
+    "Lucknow": {
+      "city": "Lucknow",
+      "latitude": 26.8348,
+      "longitude": 80.9453,
+      "stationCount": 5,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 2880,
+        "wet_day_percentage": 26.28,
+        "mean_annual_precipitation_mm": 961.8,
+        "daily_percentiles": {
+          "p80_mm": 14.7,
+          "p90_mm": 22.2,
+          "p95_mm": 29.9,
+          "p98_mm": 42.7
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 32.4,
+          "p90_mm": 49.3,
+          "p95_mm": 65.99,
+          "p98_mm": 91.75
+        },
+        "mean_annual_max_daily_mm": 64,
+        "all_time_max_daily_mm": 124.8,
+        "all_time_max_daily_date": "1996-08-01"
+      },
+      "monsoon": {
+        "wet_day_count": 2316,
+        "wet_day_percentage": 63.28,
+        "monsoon_precipitation_share_pct": 86.6,
+        "daily_percentiles": {
+          "p80_mm": 15.8,
+          "p90_mm": 23.2,
+          "p95_mm": 31.55,
+          "p98_mm": 43.97
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 38.5,
+          "p90_mm": 56.5,
+          "p95_mm": 73.45,
+          "p98_mm": 101.87
+        },
+        "mean_annual_max_daily_mm": 63.4,
+        "max_daily_mm": 124.8,
+        "max_daily_date": "1996-08-01"
+      }
+    },
+    "Mumbai": {
+      "city": "Mumbai",
+      "latitude": 19.094,
+      "longitude": 72.8534,
+      "stationCount": 10,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 3722,
+        "wet_day_percentage": 33.97,
+        "mean_annual_precipitation_mm": 1920,
+        "daily_percentiles": {
+          "p80_mm": 22,
+          "p90_mm": 36.69,
+          "p95_mm": 54.7,
+          "p98_mm": 79.99
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 63.9,
+          "p90_mm": 103.7,
+          "p95_mm": 143.24,
+          "p98_mm": 188.5
+        },
+        "mean_annual_max_daily_mm": 123.7,
+        "all_time_max_daily_mm": 307.9,
+        "all_time_max_daily_date": "2020-08-05"
+      },
+      "monsoon": {
+        "wet_day_count": 3288,
+        "wet_day_percentage": 89.84,
+        "monsoon_precipitation_share_pct": 95.2,
+        "daily_percentiles": {
+          "p80_mm": 23.8,
+          "p90_mm": 38.8,
+          "p95_mm": 57.23,
+          "p98_mm": 81.86
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 73.68,
+          "p90_mm": 117,
+          "p95_mm": 152.17,
+          "p98_mm": 199.69
+        },
+        "mean_annual_max_daily_mm": 123.3,
+        "max_daily_mm": 307.9,
+        "max_daily_date": "2020-08-05"
+      }
+    },
+    "Patna": {
+      "city": "Patna",
+      "latitude": 25.6013,
+      "longitude": 85.1288,
+      "stationCount": 6,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 3389,
+        "wet_day_percentage": 30.93,
+        "mean_annual_precipitation_mm": 1106.1,
+        "daily_percentiles": {
+          "p80_mm": 14.5,
+          "p90_mm": 20.6,
+          "p95_mm": 28.9,
+          "p98_mm": 43.25
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 32.9,
+          "p90_mm": 47.71,
+          "p95_mm": 62.51,
+          "p98_mm": 87
+        },
+        "mean_annual_max_daily_mm": 79.3,
+        "all_time_max_daily_mm": 309.7,
+        "all_time_max_daily_date": "1996-06-30"
+      },
+      "monsoon": {
+        "wet_day_count": 2671,
+        "wet_day_percentage": 72.98,
+        "monsoon_precipitation_share_pct": 85.7,
+        "daily_percentiles": {
+          "p80_mm": 15.6,
+          "p90_mm": 21.8,
+          "p95_mm": 29.85,
+          "p98_mm": 44.3
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 40,
+          "p90_mm": 54.2,
+          "p95_mm": 71.57,
+          "p98_mm": 97.52
+        },
+        "mean_annual_max_daily_mm": 75.6,
+        "max_daily_mm": 309.7,
+        "max_daily_date": "1996-06-30"
+      }
+    },
+    "Shillong": {
+      "city": "Shillong",
+      "latitude": 25.5788,
+      "longitude": 91.8933,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 7050,
+        "wet_day_percentage": 64.34,
+        "mean_annual_precipitation_mm": 3561.9,
+        "daily_percentiles": {
+          "p80_mm": 21.3,
+          "p90_mm": 34.71,
+          "p95_mm": 50.3,
+          "p98_mm": 75.1
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 57.62,
+          "p90_mm": 93.36,
+          "p95_mm": 130.18,
+          "p98_mm": 179.4
+        },
+        "mean_annual_max_daily_mm": 141.1,
+        "all_time_max_daily_mm": 383.6,
+        "all_time_max_daily_date": "1995-06-17"
+      },
+      "monsoon": {
+        "wet_day_count": 3616,
+        "wet_day_percentage": 98.8,
+        "monsoon_precipitation_share_pct": 66.3,
+        "daily_percentiles": {
+          "p80_mm": 28.7,
+          "p90_mm": 43,
+          "p95_mm": 58.82,
+          "p98_mm": 85.22
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 85.42,
+          "p90_mm": 120.56,
+          "p95_mm": 156.9,
+          "p98_mm": 205.89
+        },
+        "mean_annual_max_daily_mm": 116.9,
+        "max_daily_mm": 383.6,
+        "max_daily_date": "1995-06-17"
+      }
+    },
+    "Talcher": {
+      "city": "Talcher",
+      "latitude": 20.9501,
+      "longitude": 85.2168,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 3621,
+        "wet_day_percentage": 33.04,
+        "mean_annual_precipitation_mm": 1259.2,
+        "daily_percentiles": {
+          "p80_mm": 14.7,
+          "p90_mm": 22.7,
+          "p95_mm": 33.6,
+          "p98_mm": 50.8
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 33.5,
+          "p90_mm": 50.42,
+          "p95_mm": 73.01,
+          "p98_mm": 106.33
+        },
+        "mean_annual_max_daily_mm": 84.8,
+        "all_time_max_daily_mm": 169.6,
+        "all_time_max_daily_date": "2020-08-04"
+      },
+      "monsoon": {
+        "wet_day_count": 2708,
+        "wet_day_percentage": 73.99,
+        "monsoon_precipitation_share_pct": 82.1,
+        "daily_percentiles": {
+          "p80_mm": 15.9,
+          "p90_mm": 24.7,
+          "p95_mm": 35.07,
+          "p98_mm": 53.37
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 40.5,
+          "p90_mm": 60.7,
+          "p95_mm": 84.3,
+          "p98_mm": 123.44
+        },
+        "mean_annual_max_daily_mm": 83.9,
+        "max_daily_mm": 169.6,
+        "max_daily_date": "2020-08-04"
+      }
+    },
+    "Thiruvananthapuram": {
+      "city": "Thiruvananthapuram",
+      "latitude": 8.5079,
+      "longitude": 76.9392,
+      "stationCount": 2,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 7047,
+        "wet_day_percentage": 64.31,
+        "mean_annual_precipitation_mm": 2091.3,
+        "daily_percentiles": {
+          "p80_mm": 12.9,
+          "p90_mm": 20.2,
+          "p95_mm": 27.7,
+          "p98_mm": 39.01
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 32.72,
+          "p90_mm": 48.36,
+          "p95_mm": 66.1,
+          "p98_mm": 91.36
+        },
+        "mean_annual_max_daily_mm": 82.9,
+        "all_time_max_daily_mm": 211.5,
+        "all_time_max_daily_date": "1992-11-13"
+      },
+      "monsoon": {
+        "wet_day_count": 2848,
+        "wet_day_percentage": 77.81,
+        "monsoon_precipitation_share_pct": 41.7,
+        "daily_percentiles": {
+          "p80_mm": 13.5,
+          "p90_mm": 21,
+          "p95_mm": 29.23,
+          "p98_mm": 41.01
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 36.12,
+          "p90_mm": 53.91,
+          "p95_mm": 70.95,
+          "p98_mm": 94.82
+        },
+        "mean_annual_max_daily_mm": 54.4,
+        "max_daily_mm": 111.9,
+        "max_daily_date": "1991-06-02"
+      }
+    },
+    "Visakhapatnam": {
+      "city": "Visakhapatnam",
+      "latitude": 17.6868,
+      "longitude": 83.2185,
+      "stationCount": 1,
+      "period": "1991-2020",
+      "total_days": 10958,
+      "wet_day_threshold_mm": 1,
+      "all_year": {
+        "wet_day_count": 3234,
+        "wet_day_percentage": 29.51,
+        "mean_annual_precipitation_mm": 1019,
+        "daily_percentiles": {
+          "p80_mm": 12.7,
+          "p90_mm": 21,
+          "p95_mm": 33.23,
+          "p98_mm": 50.3
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 26.5,
+          "p90_mm": 44.57,
+          "p95_mm": 67.83,
+          "p98_mm": 101
+        },
+        "mean_annual_max_daily_mm": 95.2,
+        "all_time_max_daily_mm": 318.7,
+        "all_time_max_daily_date": "2015-11-01"
+      },
+      "monsoon": {
+        "wet_day_count": 2151,
+        "wet_day_percentage": 58.77,
+        "monsoon_precipitation_share_pct": 66.9,
+        "daily_percentiles": {
+          "p80_mm": 12.8,
+          "p90_mm": 21,
+          "p95_mm": 33,
+          "p98_mm": 50.2
+        },
+        "rolling_3day_percentiles": {
+          "p80_mm": 29.3,
+          "p90_mm": 46.44,
+          "p95_mm": 68.94,
+          "p98_mm": 100.24
+        },
+        "mean_annual_max_daily_mm": 74.1,
+        "max_daily_mm": 158,
+        "max_daily_date": "2005-09-19"
+      }
+    }
+  }
+}

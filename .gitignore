@@ -50,6 +50,9 @@ smoke/
 /smoke/
 /data/*
 !/data/triage_eval/
+!/data/rainfall_climatology/
+cache/
+data/rainfall_cache/
 !src/data/
 src/data/live_history/
 src/data/uploads/

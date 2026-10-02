@@ -34,6 +34,7 @@ const SUITES: SuiteConfig[] = [
   { name: 'HTTP Integration', script: 'scripts/test_http_integration.ts' },
   { name: 'Alert Delivery', script: 'scripts/test_alert_delivery.ts' },
   { name: 'Citizen Triage', script: 'scripts/test_triage.ts' },
+  { name: 'Rainfall Data', script: 'scripts/test_rainfall_data.ts' },
 ];
 
 function loadBaseline(): Record<string, number> {
