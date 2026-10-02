@@ -1,0 +1,29 @@
+{
+  "suites": {
+    "Live Alerts": {
+      "script": "scripts/test_live_alerts.ts",
+      "baseline_total": 73
+    },
+    "Citizen Reports": {
+      "script": "scripts/test_citizen_reports.ts",
+      "baseline_total": 59
+    },
+    "PostgreSQL Store": {
+      "script": "scripts/test_postgres_store.ts",
+      "baseline_total": 24
+    },
+    "HTTP Integration": {
+      "script": "scripts/test_http_integration.ts",
+      "baseline_total": 41
+    },
+    "Alert Delivery": {
+      "script": "scripts/test_alert_delivery.ts",
+      "baseline_total": 204
+    },
+    "Citizen Triage": {
+      "script": "scripts/test_triage.ts",
+      "baseline_total": 78
+    }
+  },
+  "overall_baseline_total": 479
+}

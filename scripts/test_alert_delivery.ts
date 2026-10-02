@@ -894,6 +894,39 @@ async function runTestSuite() {
     assert(claimedItem?.status === 'SENDING', 'Claimed item status is SENDING');
     assert(!!claimedItem?.lease_expires_at, 'Claimed item has lease_expires_at set');
 
+    // Prove ALERT_SEND_LEASE_SECONDS environment variable governs lease duration
+    const origLeaseEnv = process.env.ALERT_SEND_LEASE_SECONDS;
+    try {
+      process.env.ALERT_SEND_LEASE_SECONDS = '250';
+      const insertEnvRes = await store.queueOutboxAlert({
+        station_id: 'DL001',
+        station_name: 'Anand Vihar',
+        city: 'Delhi',
+        probability: 0.85,
+        tier: 'High',
+        source_observation_timestamp: new Date().toISOString(),
+        model_version: 'v1.0.0',
+        coord_quality: 'station',
+        expected_people_exposed: 100000,
+        payload: mockPayload,
+        dedupe_key: `lease_env_test_${Date.now()}`,
+        status: 'PENDING',
+        max_attempts: 3,
+        next_attempt_at: new Date(Date.now() - 5000).toISOString(),
+      });
+      const claimedEnv = await store.claimPendingOutboxItems(10); // omit explicit leaseSeconds
+      const itemEnv = claimedEnv.find((item) => item.id === insertEnvRes.outboxId);
+      assert(!!itemEnv?.lease_expires_at, 'Claimed item with env leaseSeconds has lease_expires_at');
+      const leaseDiffSec = (new Date(itemEnv!.lease_expires_at!).getTime() - Date.now()) / 1000;
+      assert(leaseDiffSec >= 240 && leaseDiffSec <= 260, 'lease_expires_at uses ALERT_SEND_LEASE_SECONDS (250s)');
+    } finally {
+      if (origLeaseEnv !== undefined) {
+        process.env.ALERT_SEND_LEASE_SECONDS = origLeaseEnv;
+      } else {
+        delete process.env.ALERT_SEND_LEASE_SECONDS;
+      }
+    }
+
     // Reclaim while lease is active should do NOTHING
     const reclaimedActive = await store.reclaimStuckLeases();
     assert(reclaimedActive.reclaimed === 0 && reclaimedActive.deadLettered === 0, 'Active lease is not reclaimed prematurely');

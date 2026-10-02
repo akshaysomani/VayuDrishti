@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "npm run test:live && npm run test:citizen && npm run test:pg && npm run test:http && npm run test:alert && npm run test:triage",
+    "test": "npx -y vite-node scripts/run_all_tests.ts",
     "test:live": "npx -y vite-node scripts/test_live_alerts.ts",
     "test:citizen": "npx -y vite-node scripts/test_citizen_reports.ts",
     "test:pg": "npx -y vite-node scripts/test_postgres_store.ts",
