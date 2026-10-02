@@ -25,7 +25,7 @@
  */
 
 import { getRiskTier, type RiskTier } from '../../types/alert';
-import type { LiveAlertPayload } from '../../types/liveAlert';
+import { LIVE_ALERT_STALE_HOURS, type LiveAlertPayload } from '../../types/liveAlert';
 import type {
   OutboxCreateInput,
   StructuredAlertMessage,
@@ -39,6 +39,42 @@ export const TIER_RANKS: Record<RiskTier, number> = {
   Elevated: 2,
   High: 3,
 };
+
+export function getAlertMaxAgeHours(): number {
+  const envVal = process.env.ALERT_MAX_AGE_HOURS;
+  if (envVal) {
+    const parsed = parseFloat(envVal);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return LIVE_ALERT_STALE_HOURS;
+}
+
+export function calculateObservationAgeHours(
+  sourceTimestamp: string | Date,
+  atTime: Date = new Date()
+): number {
+  const obsMs = new Date(sourceTimestamp).getTime();
+  const diffMs = atTime.getTime() - obsMs;
+  return Math.max(0, diffMs / (3600 * 1000));
+}
+
+export function formatObservationAge(ageHours: number): string {
+  const rounded = Math.round(ageHours * 10) / 10;
+  return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
+}
+
+export function formatObservationAgeNote(
+  sourceTimestamp: string,
+  ageHours: number
+): string {
+  return `Source observation: ${sourceTimestamp}, ${formatObservationAge(ageHours)} h ago at send time`;
+}
+
+export function formatIssuedLateNote(sourceTimestamp: string): string {
+  return `Issued late: source observation at ${sourceTimestamp}`;
+}
 
 export function generateDedupeKey(stationId: string, tier: string, sourceTimestamp: string): string {
   return `${stationId}:${tier}:${sourceTimestamp}`;

@@ -31,7 +31,7 @@ export interface RecipientRecord {
 
 export type RecipientCreateInput = Omit<RecipientRecord, 'id' | 'created_at' | 'updated_at' | 'deleted_at'>;
 
-export type OutboxStatus = 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'DEAD' | 'DRY_RUN';
+export type OutboxStatus = 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'DEAD' | 'DRY_RUN' | 'EXPIRED';
 
 export interface StructuredAlertMessage {
   alert_id: string;
@@ -49,6 +49,11 @@ export interface StructuredAlertMessage {
   disclaimer: string;
   coord_quality_note?: string | null;
   exposure_context?: LiveExposureContext | null;
+  observation_age_note?: string;
+  observation_age_hours?: number;
+  issued_late_note?: string | null;
+  is_resend_stale?: boolean;
+  resend_stale?: boolean;
 }
 
 export interface AlertOutboxRecord {
@@ -83,9 +88,9 @@ export interface AlertDeliveryRecord {
   id: string;
   outbox_id: string;
   recipient_id: string | null;
-  channel: AlertChannel;
+  channel: AlertChannel | 'system';
   recipient_destination: string;
-  status: 'SENT' | 'FAILED' | 'DRY_RUN';
+  status: 'SENT' | 'FAILED' | 'DRY_RUN' | 'EXPIRED';
   provider_response_code: number | null;
   provider_response_body: string | null;
   error_message: string | null;
@@ -104,8 +109,8 @@ export interface StationCooldownState {
 }
 
 export interface PublicRecentDelivery {
-  channel: AlertChannel;
-  status: 'SENT' | 'FAILED' | 'DRY_RUN';
+  channel: AlertChannel | 'system';
+  status: 'SENT' | 'FAILED' | 'DRY_RUN' | 'EXPIRED';
   station: string;
   tier: RiskTier;
   timestamp: string;

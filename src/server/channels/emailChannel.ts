@@ -32,16 +32,30 @@ export function buildEmailContent(message: StructuredAlertMessage): { text: stri
   const safeDashboardUrl = escapeHtml(message.dashboard_url);
   const isTest = message.is_test === true;
 
+  let observationAgeNote = message.observation_age_note;
+  if (!observationAgeNote) {
+    const ageHours = Math.max(
+      0,
+      (new Date().getTime() - new Date(message.source_observation_timestamp).getTime()) / (3600 * 1000)
+    );
+    const rounded = Math.round(ageHours * 10) / 10;
+    const ageStr = Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
+    observationAgeNote = `Source observation: ${message.source_observation_timestamp}, ${ageStr} h ago at send time`;
+  }
+  const safeObsAge = escapeHtml(observationAgeNote);
+  const safeIssuedLate = message.issued_late_note ? escapeHtml(message.issued_late_note) : null;
+
   const testPrefix = isTest ? '[TEST ALERT] ' : '';
 
   const text = `
-${testPrefix}VayuDrishti Acute Spike Alert
+${message.issued_late_note ? `${message.issued_late_note}\n` : ''}${testPrefix}VayuDrishti Acute Spike Alert
 ====================================================
 Tier: ${message.tier.toUpperCase()} (${safeProb}% Risk Probability)
 Station: ${message.station_name} (${message.station_id})
 City: ${message.city}
 Estimated Population Exposed (5km): ${safeExposed}
 Observed At: ${message.source_observation_timestamp}
+${observationAgeNote}
 Model: ${message.model_version}
 
 ${safeCoordNote ? `${message.coord_quality_note}\n\n` : ''}Notice: ${message.disclaimer}
@@ -61,6 +75,13 @@ Dashboard: ${message.dashboard_url}
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; color: #1e293b; background-color: #f8fafc; margin: 0; padding: 24px;">
   <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+    ${
+      safeIssuedLate
+        ? `<div style="background: #fef2f2; color: #991b1b; padding: 10px 16px; font-weight: 700; font-size: 13px; border-bottom: 1px solid #fecaca;">
+             ⚠ ${safeIssuedLate}
+           </div>`
+        : ''
+    }
     ${
       isTest
         ? `<div style="background: #fef3c7; color: #92400e; padding: 10px 16px; font-weight: 700; font-size: 13px; text-transform: uppercase; border-bottom: 1px solid #fde68a;">
@@ -94,6 +115,10 @@ Dashboard: ${message.dashboard_url}
         <tr>
           <td style="padding: 8px 0; color: #64748b;">Telemetry Timestamp:</td>
           <td style="padding: 8px 0; color: #334155;">${escapeHtml(message.source_observation_timestamp)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748b;">Source Observation:</td>
+          <td style="padding: 8px 0; color: #334155;">${safeObsAge}</td>
         </tr>
       </table>
 

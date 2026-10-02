@@ -12,7 +12,14 @@
 import { createHash } from 'node:crypto';
 import type { IAlertDeliveryStore } from '../storage/alertDeliveryStore';
 import { getAlertDeliveryStore } from '../storage/alertDeliveryStore';
-import { AlertDeliveryPolicy, TIER_RANKS } from './alertDeliveryPolicy';
+import {
+  AlertDeliveryPolicy,
+  TIER_RANKS,
+  getAlertMaxAgeHours,
+  calculateObservationAgeHours,
+  formatObservationAgeNote,
+  formatIssuedLateNote,
+} from './alertDeliveryPolicy';
 import { sendWebhookAlert } from '../channels/webhookChannel';
 import { sendEmailAlert } from '../channels/emailChannel';
 import type {
@@ -191,10 +198,49 @@ export class AlertDispatcher {
 
       for (const item of items) {
         processedCount++;
+
+        // Expiry check before send attempt (including retries and reclaimed rows)
+        const sendTime = new Date();
+        const obsAgeHours = calculateObservationAgeHours(item.source_observation_timestamp, sendTime);
+        const maxAgeHours = getAlertMaxAgeHours();
+        const isResendStale = Boolean(item.payload.is_resend_stale || item.payload.resend_stale);
+
+        if (obsAgeHours > maxAgeHours && !isResendStale) {
+          const expiryReason = 'expired: source observation older than max age';
+          await this.store.updateOutboxStatus(
+            item.id,
+            'EXPIRED',
+            item.attempts,
+            new Date(Date.now() + 365 * 86400000), // terminal
+            expiryReason
+          );
+
+          await this.store.recordDelivery({
+            outbox_id: item.id,
+            recipient_id: null,
+            channel: 'system',
+            recipient_destination: 'system:expired',
+            status: 'EXPIRED',
+            provider_response_code: 410,
+            provider_response_body: '[EXPIRED] Suppressed: source observation older than max age.',
+            error_message: expiryReason,
+          });
+
+          continue;
+        }
+
         const eligibleRecipients = allRecipients.filter((r) => this.isRecipientEligible(r, item));
 
-        // Inject genuine assigned outbox ID into payload
+        // Inject genuine assigned outbox ID and observation age into payload
         item.payload.alert_id = item.id;
+        item.payload.observation_age_note = formatObservationAgeNote(
+          item.source_observation_timestamp,
+          obsAgeHours
+        );
+        item.payload.observation_age_hours = obsAgeHours;
+        if (isResendStale && !item.payload.issued_late_note) {
+          item.payload.issued_late_note = formatIssuedLateNote(item.source_observation_timestamp);
+        }
 
         if (mode === 'dry_run') {
           dryRunCount++;

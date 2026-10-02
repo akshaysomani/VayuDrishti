@@ -271,8 +271,12 @@ async function runTriageSuite() {
     const reportId1 = uploadRes1.json?.report_id;
     assert(Boolean(reportId1), 'Upload returns assigned report_id');
 
-    // Verify row was enqueued with status PENDING
-    const enqueuedRow = await triageStore.getTriageByReportId(reportId1);
+    // Verify row was enqueued with status PENDING (asynchronously triggered on upload)
+    let enqueuedRow = await triageStore.getTriageByReportId(reportId1);
+    for (let i = 0; i < 20 && !enqueuedRow; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      enqueuedRow = await triageStore.getTriageByReportId(reportId1);
+    }
     assert(enqueuedRow !== null, 'Triage record was automatically enqueued');
     assert(enqueuedRow?.status === 'PENDING', 'Initial triage status is strictly PENDING');
     assert(enqueuedRow?.attempts === 0, 'Initial attempts count is 0');

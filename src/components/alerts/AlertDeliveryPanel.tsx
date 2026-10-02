@@ -410,7 +410,7 @@ export const AlertDeliveryPanel: React.FC = () => {
       )}
 
       {/* 2. Key Metrics Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="p-3 rounded-lg bg-surface-subtle border border-surface-border">
           <div className="text-[11px] font-medium text-fg-secondary">Pending Queue</div>
           <div className="text-xl font-bold font-mono text-fg-primary mt-1">
@@ -431,6 +431,13 @@ export const AlertDeliveryPanel: React.FC = () => {
             {stats?.counts_by_status?.DRY_RUN ?? 0}
           </div>
           <div className="text-[10px] text-fg-secondary">Logged without send</div>
+        </div>
+        <div className="p-3 rounded-lg bg-surface-subtle border border-surface-border">
+          <div className="text-[11px] font-medium text-fg-secondary">Expired (Stale)</div>
+          <div className="text-xl font-bold font-mono text-slate-500 dark:text-slate-400 mt-1">
+            {stats?.counts_by_status?.EXPIRED ?? 0}
+          </div>
+          <div className="text-[10px] text-fg-secondary">Exceeded max age</div>
         </div>
         <div className="p-3 rounded-lg bg-surface-subtle border border-surface-border">
           <div className="text-[11px] font-medium text-fg-secondary">Failed / Dead</div>
@@ -557,6 +564,8 @@ export const AlertDeliveryPanel: React.FC = () => {
                             ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                             : del.status === 'DRY_RUN'
                             ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                            : del.status === 'EXPIRED'
+                            ? 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30'
                             : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
                         }`}
                       >
@@ -962,6 +971,8 @@ export const AlertDeliveryPanel: React.FC = () => {
                                   ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                                   : del.status === 'DRY_RUN'
                                   ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                  : del.status === 'EXPIRED'
+                                  ? 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30'
                                   : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
                               }`}
                             >

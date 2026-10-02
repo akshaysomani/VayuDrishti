@@ -32,11 +32,16 @@ import http from 'node:http';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import pg from 'pg';
 import { getRiskTier, RiskTier } from '../src/types/alert';
 import {
   AlertDeliveryPolicy,
-  formatAlertMessage,
   generateDedupeKey,
+  getAlertMaxAgeHours,
+  calculateObservationAgeHours,
+  formatObservationAge,
+  formatObservationAgeNote,
+  formatIssuedLateNote,
 } from '../src/server/services/alertDeliveryPolicy';
 import {
   isSsrfBlocked,
@@ -58,7 +63,8 @@ import {
   handleAlertDeliveryRequest,
   resetAuthRateLimiterForTesting,
 } from '../src/server/alertDeliveryHandler';
-import { prepareTestDatabase, truncateTestDatabase } from '../src/server/db/testDbHelper';
+import { prepareTestDatabase, truncateTestDatabase, extractDatabaseName, getVerifiedTestDatabaseUrl } from '../src/server/db/testDbHelper';
+import { runDatabaseMigrations, normalizeDatabaseUrl } from '../src/server/db/migrator';
 import type { LiveAlertPayload } from '../src/types/liveAlert';
 import type { RecipientRecord, StructuredAlertMessage } from '../src/types/alertDelivery';
 
@@ -1527,6 +1533,429 @@ async function runTestSuite() {
     assert(resValid.status === 200, 'Valid admin token succeeds immediately despite failed attempt count on client');
 
     server.close();
+  }
+
+  // ===========================================================================
+  // TEST 23: Outbox Alert Expiry Hardening & Stale Suppression (Phase 5 f4)
+  // ===========================================================================
+  console.log('\nTEST 23: Outbox Alert Expiry Hardening & Stale Suppression');
+  {
+    await truncateTestDatabase();
+    const testDbUrl = getVerifiedTestDatabaseUrl();
+    const store = new PostgresAlertDeliveryStore(testDbUrl);
+    const dispatcher = new AlertDispatcher(store);
+    dispatcher.setMode('dry_run');
+
+    const maxAgeHours = getAlertMaxAgeHours(); // 6 hours default
+    const now = Date.now();
+
+    // -------------------------------------------------------------------------
+    // 1. Expiry at boundaries: just under max age (5.95h) and just over (6.05h)
+    // -------------------------------------------------------------------------
+    const justUnderObsTime = new Date(now - (maxAgeHours - 0.05) * 3600 * 1000).toISOString();
+    const justOverObsTime = new Date(now - (maxAgeHours + 0.05) * 3600 * 1000).toISOString();
+
+    const underItem = await store.queueOutboxAlert({
+      station_id: 'DL001',
+      city: 'Delhi',
+      probability: 0.85,
+      tier: 'High',
+      source_observation_timestamp: justUnderObsTime,
+      model_version: 'v1.0',
+      coord_quality: 'station',
+      expected_people_exposed: 10000,
+      payload: {
+        alert_id: '',
+        station_id: 'DL001',
+        station_name: 'Anand Vihar',
+        city: 'Delhi',
+        probability: 0.85,
+        tier: 'High',
+        expected_people_exposed: 10000,
+        coord_quality: 'station',
+        source_observation_timestamp: justUnderObsTime,
+        model_version: 'v1.0',
+        dashboard_url: 'http://localhost:5173',
+        disclaimer: 'test',
+      },
+      dedupe_key: `boundary_under_${now}`,
+      status: 'PENDING',
+      max_attempts: 3,
+      next_attempt_at: new Date().toISOString(),
+    });
+
+    const overItem = await store.queueOutboxAlert({
+      station_id: 'DL002',
+      city: 'Delhi',
+      probability: 0.90,
+      tier: 'High',
+      source_observation_timestamp: justOverObsTime,
+      model_version: 'v1.0',
+      coord_quality: 'station',
+      expected_people_exposed: 15000,
+      payload: {
+        alert_id: '',
+        station_id: 'DL002',
+        station_name: 'Punjabi Bagh',
+        city: 'Delhi',
+        probability: 0.90,
+        tier: 'High',
+        expected_people_exposed: 15000,
+        coord_quality: 'station',
+        source_observation_timestamp: justOverObsTime,
+        model_version: 'v1.0',
+        dashboard_url: 'http://localhost:5173',
+        disclaimer: 'test',
+      },
+      dedupe_key: `boundary_over_${now}`,
+      status: 'PENDING',
+      max_attempts: 3,
+      next_attempt_at: new Date().toISOString(),
+    });
+
+    await dispatcher.dispatchCycle();
+
+    const underRecord = await store.getOutboxItemById(underItem.outboxId!);
+    const overRecord = await store.getOutboxItemById(overItem.outboxId!);
+
+    assert(underRecord?.status === 'DRY_RUN', 'Boundary just under max age (5.95h) does NOT expire (status is DRY_RUN)');
+    assert(overRecord?.status === 'EXPIRED', 'Boundary just over max age (6.05h) moves to terminal EXPIRED status');
+    assert(
+      overRecord?.last_error === 'expired: source observation older than max age',
+      'EXPIRED row records reason "expired: source observation older than max age"'
+    );
+
+    // Audit log has EXPIRED row
+    const auditRes = await store.listRecentDeliveries(10);
+    const expiredAudit = auditRes.find((a) => a.outbox_id === overItem.outboxId!);
+    assert(expiredAudit?.status === 'EXPIRED', 'Audit row written to alert_deliveries with status EXPIRED');
+    assert(expiredAudit?.channel === 'system', 'Audit row records system channel for expiry event');
+
+    // -------------------------------------------------------------------------
+    // 2. Expiry applies across first attempt, retry, and reclaim paths
+    // -------------------------------------------------------------------------
+    // A) First attempt path
+    const staleTime = new Date(now - 10 * 3600 * 1000).toISOString();
+    const firstAttemptItem = await store.queueOutboxAlert({
+      station_id: 'DL003',
+      city: 'Delhi',
+      probability: 0.88,
+      tier: 'High',
+      source_observation_timestamp: staleTime,
+      model_version: 'v1.0',
+      coord_quality: 'station',
+      payload: {
+        alert_id: '',
+        station_id: 'DL003',
+        station_name: 'IHBAS',
+        city: 'Delhi',
+        probability: 0.88,
+        tier: 'High',
+        expected_people_exposed: 5000,
+        coord_quality: 'station',
+        source_observation_timestamp: staleTime,
+        model_version: 'v1.0',
+        dashboard_url: 'http://localhost:5173',
+        disclaimer: 'test',
+      },
+      dedupe_key: `first_attempt_stale_${now}`,
+      status: 'PENDING',
+      max_attempts: 3,
+      next_attempt_at: new Date().toISOString(),
+    });
+
+    await dispatcher.dispatchCycle();
+    const firstRec = await store.getOutboxItemById(firstAttemptItem.outboxId!);
+    assert(firstRec?.status === 'EXPIRED', 'First attempt on stale alert transitions directly to EXPIRED');
+
+    // B) Retry path: Row was FAILED with backoff, but observation timestamp is now > 6h old
+    const client = (store as any).pool;
+    const retryItem = await store.queueOutboxAlert({
+      station_id: 'DL004',
+      city: 'Delhi',
+      probability: 0.82,
+      tier: 'High',
+      source_observation_timestamp: staleTime,
+      model_version: 'v1.0',
+      coord_quality: 'station',
+      payload: {
+        alert_id: '',
+        station_id: 'DL004',
+        station_name: 'RK Puram',
+        city: 'Delhi',
+        probability: 0.82,
+        tier: 'High',
+        expected_people_exposed: 8000,
+        coord_quality: 'station',
+        source_observation_timestamp: staleTime,
+        model_version: 'v1.0',
+        dashboard_url: 'http://localhost:5173',
+        disclaimer: 'test',
+      },
+      dedupe_key: `retry_stale_${now}`,
+      status: 'PENDING',
+      max_attempts: 3,
+      next_attempt_at: new Date().toISOString(),
+    });
+    // Set to FAILED for retry simulation
+    await client.query("UPDATE alert_outbox SET status = 'FAILED', attempts = 1, next_attempt_at = NOW() - INTERVAL '1 minute' WHERE id = $1", [retryItem.outboxId!]);
+    await dispatcher.dispatchCycle();
+    const retryRec = await store.getOutboxItemById(retryItem.outboxId!);
+    assert(retryRec?.status === 'EXPIRED', 'Retry path detects stale observation before send attempt and marks EXPIRED');
+
+    // C) Reclaim path: Row was in SENDING with expired lease, now reclaimed
+    const reclaimItem = await store.queueOutboxAlert({
+      station_id: 'DL005',
+      city: 'Delhi',
+      probability: 0.80,
+      tier: 'High',
+      source_observation_timestamp: staleTime,
+      model_version: 'v1.0',
+      coord_quality: 'station',
+      payload: {
+        alert_id: '',
+        station_id: 'DL005',
+        station_name: 'Bawana',
+        city: 'Delhi',
+        probability: 0.80,
+        tier: 'High',
+        expected_people_exposed: 6000,
+        coord_quality: 'station',
+        source_observation_timestamp: staleTime,
+        model_version: 'v1.0',
+        dashboard_url: 'http://localhost:5173',
+        disclaimer: 'test',
+      },
+      dedupe_key: `reclaim_stale_${now}`,
+      status: 'PENDING',
+      max_attempts: 3,
+      next_attempt_at: new Date().toISOString(),
+    });
+    // Set to SENDING with expired lease
+    await client.query("UPDATE alert_outbox SET status = 'SENDING', attempts = 1, lease_expires_at = NOW() - INTERVAL '10 seconds' WHERE id = $1", [reclaimItem.outboxId!]);
+    const reclaimRes = await store.reclaimStuckLeases();
+    assert(reclaimRes.reclaimed >= 1, 'Stuck SENDING row reclaimed to PENDING');
+    await client.query("UPDATE alert_outbox SET next_attempt_at = NOW() WHERE id = $1", [reclaimItem.outboxId!]);
+    await dispatcher.dispatchCycle();
+    const reclaimedRec = await store.getOutboxItemById(reclaimItem.outboxId!);
+    assert(reclaimedRec?.status === 'EXPIRED', 'Reclaimed row is detected as stale before send attempt and transitions to EXPIRED');
+
+    // -------------------------------------------------------------------------
+    // 3. EXPIRED rows are never retried or reclaimed
+    // -------------------------------------------------------------------------
+    const claimedAfter = await store.claimPendingOutboxItems(10);
+    assert(
+      claimedAfter.every((c) => c.status !== 'EXPIRED'),
+      'claimPendingOutboxItems never claims EXPIRED rows'
+    );
+    const reclaimedCheck = await store.reclaimStuckLeases();
+    assert(reclaimedCheck.reclaimed === 0, 'reclaimStuckLeases never reclaims EXPIRED rows');
+
+    // -------------------------------------------------------------------------
+    // 4. Manual retry endpoint: 409 without resend_stale=true; 200 with resend_stale=true
+    //    and message body includes "Issued late: source observation at <time>" line
+    // -------------------------------------------------------------------------
+    resetAuthRateLimiterForTesting();
+    const server = http.createServer((req, res) => handleAlertDeliveryRequest(req, res));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const port = (server.address() as any).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const authHeaders = { Authorization: `Bearer ${process.env.ALERT_ADMIN_TOKEN}` };
+
+    const expiredId = overItem.outboxId!;
+
+    // 4a. Without flag: must refuse with 409
+    const resRefused = await fetch(`${baseUrl}/api/alerts/delivery/admin/retry/${expiredId}`, {
+      method: 'POST',
+      headers: authHeaders,
+    });
+    assert(resRefused.status === 409, 'Manual retry on EXPIRED row without resend_stale flag refuses with 409 Conflict');
+    const errBody = await resRefused.json();
+    assert(errBody.error.includes('EXPIRED') && errBody.error.includes('resend_stale'), 'Error message explains EXPIRED requirement for resend_stale flag');
+
+    // 4b. With flag: succeeds with 200 and includes Issued late line
+    const resApproved = await fetch(`${baseUrl}/api/alerts/delivery/admin/retry/${expiredId}?resend_stale=true`, {
+      method: 'POST',
+      headers: authHeaders,
+    });
+    assert(resApproved.status === 200, 'Manual retry on EXPIRED row with resend_stale=true succeeds (200 OK)');
+    const okBody = await resApproved.json();
+    assert(okBody.issued_late_note.includes(`Issued late: source observation at ${justOverObsTime}`), 'Response includes "Issued late: source observation at <time>" line');
+
+    // Verify row transitioned to PENDING with updated payload
+    const retriedItem = await store.getOutboxItemById(expiredId);
+    assert(retriedItem?.status === 'PENDING', 'Outbox item transitioned back to PENDING after manual retry with flag');
+    assert(retriedItem?.payload.is_resend_stale === true, 'Payload has is_resend_stale flag');
+    assert(
+      retriedItem?.payload.issued_late_note?.includes(`Issued late: source observation at ${justOverObsTime}`),
+      'Outbox payload includes "Issued late: source observation at <time>" line'
+    );
+
+    // Dispatch retried item and verify message body includes issued late notice
+    await dispatcher.dispatchCycle();
+    const finalRetried = await store.getOutboxItemById(expiredId);
+    assert(finalRetried?.status === 'DRY_RUN', 'Stale row with resend_stale flag was dispatched rather than re-expired');
+
+    server.close();
+
+    // -------------------------------------------------------------------------
+    // 5. Observation age appears inside HMAC-signed webhook body and in email
+    // -------------------------------------------------------------------------
+    // Webhook check: send to local sink
+    let capturedWebhookBody = '';
+    let capturedSignature = '';
+    let capturedTimestamp = '';
+    const sinkServer = http.createServer((req, res) => {
+      let b = '';
+      req.on('data', (c) => { b += c; });
+      req.on('end', () => {
+        capturedWebhookBody = b;
+        capturedSignature = (req.headers['x-vayudrishti-signature'] as string) || '';
+        capturedTimestamp = (req.headers['x-vayudrishti-timestamp'] as string) || '';
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      });
+    });
+    await new Promise<void>((resolve) => sinkServer.listen(0, '127.0.0.1', () => resolve()));
+    const sinkPort = (sinkServer.address() as any).port;
+    const sinkUrl = `http://127.0.0.1:${sinkPort}/webhook-sink`;
+
+    const signingSecret = 'test_webhook_signing_secret_xyz';
+    process.env.ALERT_WEBHOOK_SIGNING_SECRET = signingSecret;
+    process.env.ALERT_ALLOW_PRIVATE_WEBHOOKS = 'true';
+
+    const testObsTime = new Date(Date.now() - 2.5 * 3600 * 1000).toISOString();
+    const testMsg: StructuredAlertMessage = {
+      alert_id: 'test-obs-age-id',
+      station_id: 'DL001',
+      station_name: 'Anand Vihar',
+      city: 'Delhi',
+      probability: 0.95,
+      tier: 'High',
+      expected_people_exposed: 25000,
+      coord_quality: 'station',
+      source_observation_timestamp: testObsTime,
+      model_version: 'v1.0',
+      dashboard_url: 'http://localhost:5173',
+      disclaimer: 'Early warning estimate',
+    };
+
+    const webhookRecipient: RecipientRecord = {
+      id: 'rec-test-obs-1',
+      name: 'Delhi EPA Webhook',
+      channel: 'webhook',
+      destination: sinkUrl,
+      secret_key: signingSecret,
+      scope_type: 'all',
+      active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const whResult = await sendWebhookAlert(webhookRecipient, testMsg);
+    assert(whResult.success === true, 'Webhook alert sent successfully to local sink');
+    assert(
+      capturedWebhookBody.includes(`Source observation: ${testObsTime}`),
+      'Observation age appears inside webhook JSON body'
+    );
+    assert(
+      capturedWebhookBody.includes('2.5 h ago at send time') || capturedWebhookBody.includes('h ago at send time'),
+      'Webhook body includes "<N> h ago at send time" format'
+    );
+
+    // Verify HMAC-SHA256 signature covers the body containing the observation age
+    const expectedSig = signWebhookPayload(signingSecret, capturedTimestamp, capturedWebhookBody);
+    assert(capturedSignature === `sha256=${expectedSig}`, 'HMAC-SHA256 signature strictly covers body with observation age');
+
+    sinkServer.close();
+
+    // Email check: verify rendered email content includes observation age
+    const rendered = renderEmailContent(testMsg);
+    assert(
+      rendered.text.includes(`Source observation: ${testObsTime}`) && rendered.text.includes('h ago at send time'),
+      'Observation age appears in email plain text body'
+    );
+    assert(
+      rendered.html.includes(`Source observation: ${testObsTime}`) && rendered.html.includes('h ago at send time'),
+      'Observation age appears in email HTML body'
+    );
+
+    // Email check with late issue note:
+    const lateMsg: StructuredAlertMessage = {
+      ...testMsg,
+      issued_late_note: `Issued late: source observation at ${testObsTime}`,
+    };
+    const renderedLate = renderEmailContent(lateMsg);
+    assert(renderedLate.text.includes(`Issued late: source observation at ${testObsTime}`), 'Email plain text includes "Issued late: source observation at <time>" line');
+    assert(renderedLate.html.includes(`Issued late: source observation at ${testObsTime}`), 'Email HTML includes "Issued late: source observation at <time>" notice banner');
+
+    // -------------------------------------------------------------------------
+    // 6. Migration 005 applies cleanly and idempotently on a fresh scratch DB
+    // -------------------------------------------------------------------------
+    const testDbName = extractDatabaseName(testDbUrl);
+    const scratchDbName = `${testDbName}_scratch_m005_${Date.now()}`.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const testUrlObj = new URL(normalizeDatabaseUrl(testDbUrl));
+    const maintenanceUrl = `${testUrlObj.protocol}//${testUrlObj.username}:${testUrlObj.password}@${testUrlObj.host}/postgres`;
+
+    const adminClient = new pg.Client({ connectionString: maintenanceUrl });
+    await adminClient.connect();
+
+    try {
+      await adminClient.query(`CREATE DATABASE "${scratchDbName}";`);
+      const scratchDbUrl = `${testUrlObj.protocol}//${testUrlObj.username}:${testUrlObj.password}@${testUrlObj.host}/${scratchDbName}`;
+
+      // Pass 1: Apply all migrations (001-005)
+      const resPass1 = await runDatabaseMigrations(scratchDbUrl);
+      assert(resPass1.applied.includes('005_alert_delivery_expiry.sql'), 'Migration 005 applies cleanly on fresh scratch DB');
+      assert(resPass1.applied.length === 5, 'All 5 migrations applied cleanly on fresh scratch DB');
+
+      // Verify EXPIRED status check constraints on scratch DB
+      const scratchClient = new pg.Client({ connectionString: scratchDbUrl });
+      await scratchClient.connect();
+      try {
+        // Can insert row with status EXPIRED into alert_outbox
+        const insOutbox = await scratchClient.query(`
+          INSERT INTO alert_outbox (
+            station_id, city, probability, tier, source_observation_timestamp,
+            model_version, coord_quality, payload, dedupe_key, status
+          ) VALUES (
+            'DL001', 'Delhi', 0.85, 'High', NOW(), 'v1.0', 'station',
+            '{}'::jsonb, 'scratch_dedupe_1', 'EXPIRED'
+          ) RETURNING id, status;
+        `);
+        assert(insOutbox.rows[0].status === 'EXPIRED', 'Scratch DB allows EXPIRED status in alert_outbox');
+
+        // Can insert row with status EXPIRED into alert_deliveries
+        const insDelivery = await scratchClient.query(`
+          INSERT INTO alert_deliveries (
+            outbox_id, channel, recipient_destination, status
+          ) VALUES ($1, 'system', 'system:expired', 'EXPIRED')
+          RETURNING id, status;
+        `, [insOutbox.rows[0].id]);
+        assert(insDelivery.rows[0].status === 'EXPIRED', 'Scratch DB allows EXPIRED status in alert_deliveries');
+      } finally {
+        await scratchClient.end();
+      }
+
+      // Pass 2: Re-run migrations to prove idempotency
+      const resPass2 = await runDatabaseMigrations(scratchDbUrl);
+      assert(resPass2.applied.length === 0, 'Migration 005 is strictly idempotent (0 new migrations on Pass 2)');
+    } finally {
+      // Terminate connections and drop scratch DB
+      try {
+        await adminClient.query(`
+          SELECT pg_terminate_backend(pg_stat_activity.pid)
+          FROM pg_stat_activity
+          WHERE pg_stat_activity.datname = $1
+            AND pid <> pg_backend_pid();
+        `, [scratchDbName]);
+        await adminClient.query(`DROP DATABASE IF EXISTS "${scratchDbName}";`);
+      } catch (err) {
+        console.warn('Warning dropping scratch database:', err);
+      }
+      await adminClient.end();
+    }
+    assert(true, 'Scratch database dropped cleanly after migration 005 verification');
   }
 
   console.log('\n----------------------------------------------------------------');

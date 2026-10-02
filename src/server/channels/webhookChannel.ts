@@ -117,11 +117,28 @@ export async function sendWebhookAlert(
   const signingSecret =
     recipient.secret_key || process.env.ALERT_WEBHOOK_SIGNING_SECRET || 'vayudrishti_webhook_default_secret';
   const timestamp = new Date().toISOString();
+
+  if (!message.observation_age_note) {
+    const ageHours = Math.max(
+      0,
+      (new Date().getTime() - new Date(message.source_observation_timestamp).getTime()) / (3600 * 1000)
+    );
+    const rounded = Math.round(ageHours * 10) / 10;
+    const ageStr = Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
+    message.observation_age_note = `Source observation: ${message.source_observation_timestamp}, ${ageStr} h ago at send time`;
+    message.observation_age_hours = ageHours;
+  }
+
   const bodyPayload: Record<string, any> = {
     event: 'air_quality.acute_spike_alert',
     timestamp,
     data: message,
+    observation_age_note: message.observation_age_note,
   };
+
+  if (message.issued_late_note) {
+    bodyPayload.issued_late_note = message.issued_late_note;
+  }
 
   if (idempotencyKey) {
     bodyPayload.delivery_id = idempotencyKey;

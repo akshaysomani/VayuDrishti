@@ -27,6 +27,7 @@ import type {
   PublicRecentDelivery,
   StationCooldownState,
   AlertDeliveryMode,
+  StructuredAlertMessage,
 } from '../../types/alertDelivery';
 import type { RiskTier } from '../../types/alert';
 
@@ -56,7 +57,11 @@ export interface IAlertDeliveryStore {
   getStationLastAlert(stationId: string): Promise<{ tier: RiskTier; createdAt: Date } | null>;
   getDeliveryStats(): Promise<AlertDeliveryStats>;
   getAdminDeliveryStats(): Promise<AdminAlertDeliveryStats>;
-  retryFailedItem(id: string): Promise<boolean>;
+  retryFailedItem(id: string, options?: { resendStale?: boolean; updatedPayload?: StructuredAlertMessage }): Promise<boolean>;
+  retryOutboxItem(
+    id: string,
+    options?: { resendStale?: boolean; updatedPayload?: StructuredAlertMessage }
+  ): Promise<{ success: boolean; reason?: string; status?: OutboxStatus }>;
   clear(): Promise<void>;
 }
 
@@ -460,6 +465,7 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
       FAILED: 0,
       DEAD: 0,
       DRY_RUN: 0,
+      EXPIRED: 0,
     };
     for (const r of countsRes.rows) {
       if (counts[r.status as OutboxStatus] !== undefined) {
@@ -528,17 +534,62 @@ export class PostgresAlertDeliveryStore implements IAlertDeliveryStore {
     };
   }
 
-  public async retryFailedItem(id: string): Promise<boolean> {
-    const res = await this.pool.query(
-      `UPDATE alert_outbox
-       SET status = 'PENDING',
-           next_attempt_at = NOW(),
-           updated_at = NOW()
-       WHERE id = $1 AND status IN ('FAILED', 'DEAD')
-       RETURNING id;`,
-      [id]
-    );
-    return res.rows.length > 0;
+  public async retryOutboxItem(
+    id: string,
+    options?: { resendStale?: boolean; updatedPayload?: StructuredAlertMessage }
+  ): Promise<{ success: boolean; reason?: string; status?: OutboxStatus }> {
+    const item = await this.getOutboxItemById(id);
+    if (!item) {
+      return { success: false, reason: 'not_found' };
+    }
+
+    if (item.status === 'EXPIRED') {
+      if (!options?.resendStale) {
+        return { success: false, reason: 'expired', status: 'EXPIRED' };
+      }
+      const newPayload = options.updatedPayload || {
+        ...item.payload,
+        is_resend_stale: true,
+        resend_stale: true,
+      };
+      await this.pool.query(
+        `UPDATE alert_outbox
+         SET status = 'PENDING',
+             next_attempt_at = NOW(),
+             payload = $2,
+             last_error = 'Manual admin resend of stale alert (resend_stale=true)',
+             updated_at = NOW()
+         WHERE id = $1;`,
+        [id, JSON.stringify(newPayload)]
+      );
+      return { success: true, status: 'PENDING' };
+    }
+
+    if (item.status === 'FAILED' || item.status === 'DEAD') {
+      const newPayload = options?.updatedPayload
+        ? JSON.stringify(options.updatedPayload)
+        : JSON.stringify(item.payload);
+      await this.pool.query(
+        `UPDATE alert_outbox
+         SET status = 'PENDING',
+             next_attempt_at = NOW(),
+             payload = $2,
+             updated_at = NOW()
+         WHERE id = $1;`,
+        [id, newPayload]
+      );
+      return { success: true, status: 'PENDING' };
+    }
+
+    return { success: false, reason: 'invalid_status', status: item.status };
+  }
+
+  public async retryFailedItem(
+    id: string,
+    options?: { resendStale?: boolean; updatedPayload?: StructuredAlertMessage }
+  ): Promise<boolean> {
+    const res = await this.retryOutboxItem(id, options);
+    return res.success;
   }
 
   public async clear(): Promise<void> {

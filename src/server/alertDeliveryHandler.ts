@@ -22,6 +22,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { getAlertDeliveryStore } from './storage/alertDeliveryStore';
 import { getGlobalAlertDispatcher } from './services/alertDispatcher';
+import { formatIssuedLateNote } from './services/alertDeliveryPolicy';
 import { sendWebhookAlert } from './channels/webhookChannel';
 import { sendEmailAlert } from './channels/emailChannel';
 import type {
@@ -423,9 +424,71 @@ export async function handleAlertDeliveryRequest(
       // -----------------------------------------------------------------------
       if (pathname.startsWith('/api/alerts/delivery/admin/retry/') && method === 'POST') {
         const id = pathname.replace('/api/alerts/delivery/admin/retry/', '').trim();
+
+        let resendStale = url.searchParams.get('resend_stale') === 'true';
+
+        // Also check if resend_stale was passed in request body
+        let bodyRaw = '';
+        for await (const chunk of req) bodyRaw += chunk;
+        if (bodyRaw.trim()) {
+          try {
+            const parsedBody = JSON.parse(bodyRaw);
+            if (parsedBody?.resend_stale === true || parsedBody?.resend_stale === 'true') {
+              resendStale = true;
+            }
+          } catch {}
+        }
+
+        const item = await store.getOutboxItemById(id);
+        if (!item) {
+          sendError(res, 404, `Outbox item not found: "${id}".`);
+          return;
+        }
+
+        if (item.status === 'EXPIRED') {
+          if (!resendStale) {
+            sendError(
+              res,
+              409,
+              'Conflict: Alert is EXPIRED because source observation exceeds max age. Manual retry is refused unless explicit "resend_stale=true" parameter is provided.'
+            );
+            return;
+          }
+
+          const issuedLateNote = formatIssuedLateNote(item.source_observation_timestamp);
+          const updatedPayload: StructuredAlertMessage = {
+            ...item.payload,
+            is_resend_stale: true,
+            resend_stale: true,
+            issued_late_note: issuedLateNote,
+          };
+
+          const retryRes = await store.retryOutboxItem(id, { resendStale: true, updatedPayload });
+          if (!retryRes.success) {
+            sendError(res, 500, 'Failed to retry expired outbox item.');
+            return;
+          }
+
+          sendJson(res, 200, {
+            success: true,
+            message: `Outbox item ${id} queued for retry with late issue override.`,
+            issued_late_note: issuedLateNote,
+          });
+          return;
+        }
+
+        if (item.status !== 'FAILED' && item.status !== 'DEAD') {
+          sendError(
+            res,
+            404,
+            `Outbox item is in "${item.status}" state (can only retry FAILED, DEAD, or EXPIRED).`
+          );
+          return;
+        }
+
         const retried = await store.retryFailedItem(id);
         if (!retried) {
-          sendError(res, 404, 'Outbox item not found or not in FAILED/DEAD state.');
+          sendError(res, 404, 'Outbox item not found or not in retriable state.');
           return;
         }
         sendJson(res, 200, { success: true, message: `Outbox item ${id} queued for immediate retry.` });

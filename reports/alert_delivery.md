@@ -280,3 +280,33 @@ The policy engine acts as the gatekeeper between raw model evaluations and the o
   6. Socket disconnect / unexpected termination handling without uncaught exceptions or crashes.
   7. Zero transmission during `dry_run` mode.
 
+### 6.8 Outbox Alert Expiry & Stale Suppression Hardening
+- **Motivation:**
+  In real-world deployment, network partitions, provider rate limits, or server restarts can cause outbox rows to sit in the queue or retry backoff loops for many hours. Delivering an acute spike alert hours after the pollution event has subsided confuses emergency responders and damages observatory credibility.
+- **Dispatcher Expiry Gate:**
+  - Before every dispatch attempt (including initial attempts, exponential backoff retries, and lease-reclaimed items), the dispatcher checks the age of the original WAQI observation:
+    $$\Delta t = \text{now} - \text{source\_observation\_timestamp}$$
+  - If $\Delta t > \text{ALERT\_MAX\_AGE\_HOURS}$ (defaulting to the canonical constant `LIVE_ALERT_STALE_HOURS = 6` hours), transmission is strictly suppressed.
+- **Terminal State `EXPIRED`:**
+  - The row moves directly to terminal status `EXPIRED` in `alert_outbox`.
+  - Records `last_error = "expired: source observation older than max age"`.
+  - An audit record is written to `alert_deliveries` with `status = 'EXPIRED'`, `channel = 'system'`, and diagnostic error explanation.
+  - Migration `005_alert_delivery_expiry.sql` updates `alert_outbox` and `alert_deliveries` check constraints idempotently to permit `EXPIRED` status and `'system'` channel.
+- **Immunity from Retry and Reclamation:**
+  - `claimPendingOutboxItems` filters for `status = 'PENDING' AND next_attempt_at <= NOW()`, never touching `EXPIRED` rows.
+  - `reclaimStuckLeases` filters exclusively for `status = 'SENDING' AND lease_expires_at < NOW()`, never touching `EXPIRED` rows.
+- **Manual Admin Override (`resend_stale=true`):**
+  - Standard manual retry `POST /api/alerts/delivery/admin/retry/:id` rejects `EXPIRED` rows with `409 Conflict`.
+  - If an authorized administrator passes `?resend_stale=true` (or JSON body `resend_stale: true`), the row is transitioned back to `PENDING` with `is_resend_stale = true`.
+  - When dispatched, the message payload and body prominently prepend an advisory notice:
+    `"Issued late: source observation at <ISO timestamp>"`.
+- **Observation Age in All Alert Payloads:**
+  - Every alert transmitted via Webhook or Email includes the exact source observation age:
+    `"Source observation: <ISO timestamp>, <N> h ago at send time"`.
+  - For webhooks, `observation_age_note` and `observation_age_hours` are included inside the signed JSON payload and covered by the HMAC-SHA256 signature in `X-VayuDrishti-Signature`.
+  - For emails, the notice appears in both the plain-text preamble and the HTML header banner.
+- **Privacy-Preserving Telemetry & UI:**
+  - Public delivery statistics (`GET /api/alerts/delivery/stats`) and admin panel show aggregated counts for `EXPIRED`.
+  - `AlertDeliveryPanel.tsx` includes a distinct slate-themed status badge for `EXPIRED` without exposing destination data or PII in unauthenticated views.
+
+
